@@ -1,6 +1,8 @@
 import type { LocationObject } from 'expo-location';
 import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
 
+import { distanceBetween } from '@/features/activities/routeDistance';
+
 import type { Activity, ActivityRoute, RoutePoint } from './activities';
 
 export type RecordingMode = 'background' | 'foreground' | 'timer';
@@ -12,6 +14,8 @@ export interface RideDraft extends Activity {
   checkpointAt: number;
   lastFixAt: number | null;
   speedKmh: number | null;
+  elevationGainM: number | null;
+  lastAltitudeM: number | null;
 }
 
 let database: Promise<SQLiteDatabase> | undefined;
@@ -41,6 +45,19 @@ function openDraftDatabase() {
         PRIMARY KEY (segment, timestamp)
       );
     `);
+    await db.withTransactionAsync(async () => {
+      const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+      const schemaVersion = version?.user_version ?? 0;
+      if (schemaVersion < 1) {
+        await db.execAsync(`
+          ALTER TABLE draft ADD COLUMN elevationGainM REAL;
+          ALTER TABLE draft ADD COLUMN lastAltitudeM REAL;
+        `);
+      }
+      if (schemaVersion < 2) {
+        await db.execAsync('ALTER TABLE points ADD COLUMN altitudeM REAL; PRAGMA user_version = 2;');
+      }
+    });
     return db;
   }).catch(error => {
     database = undefined;
@@ -80,7 +97,7 @@ export function beginRideSegment(mode: RecordingMode, now: number) {
       ON CONFLICT(id) DO UPDATE SET
         mode = excluded.mode, segment = draft.segment + 1,
         segmentStart = excluded.segmentStart, checkpointAt = excluded.checkpointAt,
-        lastFixAt = NULL, speedKmh = NULL
+        lastFixAt = NULL, speedKmh = NULL, lastAltitudeM = NULL
     `, now, mode, now, now);
     return (await readDraft(db))!;
   });
@@ -128,7 +145,7 @@ export async function loadDraftRoutePoints(
 ) {
   const db = await openDraftDatabase();
   return db.getAllAsync<DraftRoutePoint>(`
-    SELECT segment, timestamp, latitude, longitude FROM points
+    SELECT segment, timestamp, latitude, longitude, altitudeM FROM points
     WHERE (segment, timestamp) > (?, ?)
       AND EXISTS (SELECT 1 FROM draft WHERE startedAt = ?)
     ORDER BY segment, timestamp
@@ -138,7 +155,7 @@ export async function loadDraftRoutePoints(
 export async function loadDraftRoute(): Promise<ActivityRoute> {
   const db = await openDraftDatabase();
   const rows = await db.getAllAsync<RoutePoint & { segment: number }>(
-    'SELECT segment, timestamp, latitude, longitude FROM points ORDER BY segment, timestamp',
+    'SELECT segment, timestamp, latitude, longitude, altitudeM FROM points ORDER BY segment, timestamp',
   );
   const route: ActivityRoute = [];
   let segmentNumber = -1;
@@ -150,15 +167,6 @@ export async function loadDraftRoute(): Promise<ActivityRoute> {
     route[route.length - 1].push(point);
   }
   return route;
-}
-
-function distanceBetween(a: RoutePoint, b: RoutePoint) {
-  const radians = Math.PI / 180;
-  const latitude = Math.sin((b.latitude - a.latitude) * radians / 2);
-  const longitude = Math.sin((b.longitude - a.longitude) * radians / 2);
-  const haversine = latitude ** 2 +
-    Math.cos(a.latitude * radians) * Math.cos(b.latitude * radians) * longitude ** 2;
-  return 12_742_000 * Math.asin(Math.sqrt(Math.min(1, haversine)));
 }
 
 export function appendRideLocations(locations: LocationObject[], source: 'background' | number) {
@@ -184,18 +192,32 @@ export function appendRideLocations(locations: LocationObject[], source: 'backgr
       draft.lastFixAt = timestamp;
       const speed = coords.speed;
       draft.speedKmh = speed !== null && Number.isFinite(speed) && speed >= 0 ? speed * 3.6 : null;
-      const point = { latitude: coords.latitude, longitude: coords.longitude, timestamp };
+      const altitude = coords.altitude;
+      const altitudeM = altitude !== null && Number.isFinite(altitude) ? altitude : null;
+      const point = { latitude: coords.latitude, longitude: coords.longitude, timestamp, altitudeM };
       const distance = previous ? distanceBetween(previous, point) : 0;
       if (previous && distance < 5) continue;
       await db.runAsync(
-        'INSERT INTO points (segment, timestamp, latitude, longitude) VALUES (?, ?, ?, ?)',
-        draft.segment, timestamp, point.latitude, point.longitude,
+        'INSERT INTO points (segment, timestamp, latitude, longitude, altitudeM) VALUES (?, ?, ?, ?, ?)',
+        draft.segment, timestamp, point.latitude, point.longitude, altitudeM,
       );
       previous = point;
       draft.distanceM = (draft.distanceM ?? 0) + distance;
+      if (altitudeM !== null) {
+        if (draft.lastAltitudeM !== null) {
+          const climb = Math.max(0, altitudeM - draft.lastAltitudeM);
+          draft.elevationGainM = (draft.elevationGainM ?? 0) + climb;
+        }
+        draft.lastAltitudeM = altitudeM;
+      } else {
+        draft.lastAltitudeM = null;
+      }
     }
     await db.runAsync(`
-      UPDATE draft SET checkpointAt = ?, lastFixAt = ?, speedKmh = ?, distanceM = ? WHERE id = 1
-    `, draft.checkpointAt, draft.lastFixAt, draft.speedKmh, draft.distanceM);
+      UPDATE draft SET checkpointAt = ?, lastFixAt = ?, speedKmh = ?, distanceM = ?,
+        elevationGainM = ?, lastAltitudeM = ?
+      WHERE id = 1
+    `, draft.checkpointAt, draft.lastFixAt, draft.speedKmh, draft.distanceM,
+    draft.elevationGainM, draft.lastAltitudeM);
   });
 }

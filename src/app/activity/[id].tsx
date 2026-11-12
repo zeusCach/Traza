@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Gauge, Route, Timer } from 'lucide-react-native';
+import { ArrowLeft, Gauge, Mountain, Route, Timer } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,7 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppButton, AppCard, EmptyState, ErrorState, LoadingState, MetricCard } from '@/components';
 import { type Activity, type ActivityRoute, loadActivities, loadActivityRoute } from '@/database/activities';
 import { ActivityRouteMap } from '@/features/activities/components/ActivityRouteMap';
-import { activityDateFormat, averageSpeed, formatDistance, formatDuration, formatSpeed } from '@/features/activities/format';
+import { ElevationProfile } from '@/features/activities/components/ElevationProfile';
+import { activityDateFormat, averageSpeed, formatDistance, formatDuration, formatElevationGain, formatSpeed } from '@/features/activities/format';
 import { colors, spacing, typography } from '@/theme';
 
 type SummaryState =
@@ -98,6 +99,9 @@ function ActivitySummary({ startedAt }: { startedAt: number }) {
           value={formatSpeed(averageSpeed(activity.distanceM, activity.durationMs))}
           unit="km/h"
         />
+        {activity.elevationGainM != null && (
+          <MetricCard label="Desnivel positivo" value={formatElevationGain(activity.elevationGainM)} unit="m" icon={Mountain} />
+        )}
       </View>
       <Text accessibilityRole="header" style={styles.heading}>Recorrido</Text>
       <AppCard>
@@ -109,6 +113,7 @@ function ActivitySummary({ startedAt }: { startedAt: number }) {
           <EmptyState icon={Route} title="Sin recorrido GPS" message="Esta rodada se guardó sin puntos GPS." />
         )}
       </AppCard>
+      {route?.some(segment => segment.some(point => point.altitudeM != null)) && <ElevationProfile route={route} />}
     </>
   );
 }

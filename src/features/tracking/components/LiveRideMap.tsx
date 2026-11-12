@@ -1,22 +1,29 @@
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components';
 import { type ActivityRoute } from '@/database/activities';
 import { type DraftRoutePoint, loadDraftRoutePoints } from '@/database/rideDraft';
-import { ActivityRouteMap } from '@/features/activities/components/ActivityRouteMap';
 import { colors, radius, spacing, typography } from '@/theme';
+
+import { RideBasemap } from './RideBasemap';
 
 interface LiveRideMapProps {
   startedAt: number;
   running: boolean;
   locationMessage: string | null;
+  header: ReactNode;
+  children: (route: ActivityRoute) => ReactNode;
 }
 
-export function LiveRideMap({ startedAt, running, locationMessage }: LiveRideMapProps) {
+export function LiveRideMap({ startedAt, running, locationMessage, header, children }: LiveRideMapProps) {
   const [route, setRoute] = useState<ActivityRoute>([]);
   const [loadError, setLoadError] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [panelHeight, setPanelHeight] = useState(0);
+  const insets = useSafeAreaInsets();
+  const viewport = useMemo(() => ({ ...insets, bottom: insets.bottom + panelHeight }), [insets, panelHeight]);
   const cursor = useRef<DraftRoutePoint | undefined>(undefined);
 
   useEffect(() => {
@@ -63,47 +70,58 @@ export function LiveRideMap({ startedAt, running, locationMessage }: LiveRideMap
     };
   }, [attempt, running, startedAt]);
 
+  const status = loadError ? 'No pudimos cargar el recorrido' : locationMessage ??
+    (!route.length ? (running ? 'Buscando señal GPS…' : 'Sin puntos GPS registrados') : null);
+
   return (
-    <View style={styles.frame}>
-      <ActivityRouteMap route={route} live />
-      {!route.length && (
-        <View style={styles.empty}>
-          <Text style={styles.message}>
-            {loadError ? 'No pudimos cargar el recorrido' : locationMessage ?? (running ? 'Buscando señal GPS…' : 'Sin puntos GPS registrados')}
-          </Text>
+    <View style={styles.screen}>
+      <RideBasemap route={route} viewport={viewport} />
+      <SafeAreaView pointerEvents="box-none" style={styles.overlay}>
+        <View pointerEvents="box-none" style={styles.top}>
+          {header}
+          {status && <Text style={styles.message}>{status}</Text>}
+          {loadError && (
+            <View style={styles.retry}>
+              <AppButton label="Actualizar mapa" size="md" variant="secondary" onPress={() => setAttempt(current => current + 1)} />
+            </View>
+          )}
         </View>
-      )}
-      {loadError && (
-        <View style={styles.retry}>
-          <AppButton label="Actualizar mapa" size="md" variant="secondary" onPress={() => setAttempt(current => current + 1)} />
+        <View
+          pointerEvents="box-none"
+          onLayout={event => setPanelHeight(event.nativeEvent.layout.height)}
+          style={styles.bottom}
+        >
+          {children(route)}
         </View>
-      )}
-      {route.length > 0 && locationMessage && (
-        <Text style={styles.status}>{locationMessage}</Text>
-      )}
+      </SafeAreaView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  frame: {
+  screen: { flex: 1, backgroundColor: colors.surface },
+  overlay: { ...StyleSheet.absoluteFill, justifyContent: 'space-between' },
+  top: {
+    gap: spacing.xs,
+    paddingTop: spacing.sm,
+    paddingLeft: spacing.md,
+    paddingRight: 90,
+  },
+  bottom: {
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+    gap: spacing.xs,
+  },
+  message: {
+    ...typography.bodySmall,
+    color: colors.textPrimary,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.background,
     borderRadius: radius.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-    backgroundColor: colors.surface,
+    padding: spacing.sm,
   },
-  empty: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.xl,
-  },
-  message: { ...typography.bodySmall, color: colors.textPrimary, textAlign: 'center' },
-  status: { ...typography.bodySmall, color: colors.textSecondary, padding: spacing.sm },
-  retry: { position: 'absolute', bottom: spacing.sm, alignSelf: 'center' },
+  retry: { alignSelf: 'flex-start' },
 });

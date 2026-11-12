@@ -39,8 +39,8 @@ export function projectRoute(route: ActivityRoute, viewportHeight = height) {
 }
 
 export const ActivityRouteMap = memo(function ActivityRouteMap({
-  route, live = false,
-}: { route: ActivityRoute; live?: boolean }) {
+  route, live = false, fill = false,
+}: { route: ActivityRoute; live?: boolean; fill?: boolean }) {
   const viewportHeight = live ? liveHeight : height;
   const segments = projectRoute(route, viewportHeight);
   const start = segments[0]?.[0];
@@ -48,7 +48,7 @@ export const ActivityRouteMap = memo(function ActivityRouteMap({
   if (!start && !live) return null;
 
   return (
-    <View style={[styles.map, live && styles.live]}>
+    <View style={fill ? styles.fill : [styles.map, live && styles.live]}>
       <Svg
         width="100%"
         height="100%"
@@ -93,5 +93,6 @@ export const ActivityRouteMap = memo(function ActivityRouteMap({
 const styles = StyleSheet.create({
   map: { width: '100%', aspectRatio: width / height, backgroundColor: colors.background },
   live: { aspectRatio: width / liveHeight, maxHeight: 420, backgroundColor: colors.surface },
+  fill: { flex: 1, width: '100%', backgroundColor: colors.surface },
   north: { position: 'absolute', top: spacing.sm, right: spacing.sm, ...typography.caption, color: colors.textSecondary },
 });

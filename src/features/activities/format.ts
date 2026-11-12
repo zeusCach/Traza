@@ -25,3 +25,7 @@ export function averageSpeed(distanceM: number | null, durationMs: number) {
 export function formatSpeed(kmh: number | null) {
   return kmh === null ? '—' : speedFormat.format(kmh);
 }
+
+export function formatElevationGain(meters: number | null | undefined) {
+  return meters == null ? '—' : distanceFormat.format(Math.round(meters));
+}

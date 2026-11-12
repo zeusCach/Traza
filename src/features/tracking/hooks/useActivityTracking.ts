@@ -236,7 +236,12 @@ export function useActivityTracking() {
   }
 
   return {
-    activity: draft && { startedAt: draft.startedAt, durationMs: draft.durationMs, distanceM: draft.distanceM },
+    activity: draft && {
+      startedAt: draft.startedAt,
+      durationMs: draft.durationMs,
+      distanceM: draft.distanceM,
+      elevationGainM: draft.elevationGainM,
+    },
     running,
     elapsedMs: (draft?.durationMs ?? 0) + (segmentStart === null ? 0 : Math.max(0, now - segmentStart)),
     currentSpeedKmh: running && !locationFailed && draft?.lastFixAt != null && now - draft.lastFixAt < speedMaxAgeMs

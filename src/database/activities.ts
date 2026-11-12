@@ -4,12 +4,14 @@ export interface Activity {
   startedAt: number;
   durationMs: number;
   distanceM: number | null;
+  elevationGainM?: number | null;
 }
 
 export interface RoutePoint {
   latitude: number;
   longitude: number;
   timestamp: number;
+  altitudeM?: number | null;
 }
 
 export type ActivityRoute = RoutePoint[][];
@@ -38,7 +40,9 @@ function isActivity(value: unknown): value is Activity {
     typeof activity.startedAt === 'number' && Number.isFinite(activity.startedAt) &&
     typeof activity.durationMs === 'number' && Number.isFinite(activity.durationMs) &&
     (activity.distanceM === null ||
-      (typeof activity.distanceM === 'number' && Number.isFinite(activity.distanceM)))
+      (typeof activity.distanceM === 'number' && Number.isFinite(activity.distanceM))) &&
+    (activity.elevationGainM == null ||
+      (Number.isFinite(activity.elevationGainM) && activity.elevationGainM >= 0))
   );
 }
 
@@ -54,10 +58,11 @@ export async function loadActivityRoute(startedAt: number): Promise<ActivityRout
 
 function isRoutePoint(value: unknown): value is RoutePoint {
   if (typeof value !== 'object' || value === null) return false;
-  const { latitude, longitude, timestamp } = value as Partial<RoutePoint>;
+  const { latitude, longitude, timestamp, altitudeM } = value as Partial<RoutePoint>;
   return typeof latitude === 'number' && Math.abs(latitude) <= 90 &&
     typeof longitude === 'number' && Math.abs(longitude) <= 180 &&
-    typeof timestamp === 'number' && Number.isFinite(timestamp);
+    typeof timestamp === 'number' && Number.isFinite(timestamp) &&
+    (altitudeM == null || Number.isFinite(altitudeM));
 }
 
 export async function saveActivity(activity: Activity, route: ActivityRoute, history: Activity[]) {

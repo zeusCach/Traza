@@ -10,6 +10,11 @@ const source = readFileSync(join(__dirname, '../src/database/rideDraft.ts'), 'ut
 const { outputText } = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS },
 });
+const routeDistanceSource = readFileSync(join(__dirname, '../src/features/activities/routeDistance.ts'), 'utf8');
+const routeDistance = {};
+runInNewContext(ts.transpileModule(routeDistanceSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS },
+}).outputText, { exports: routeDistance });
 
 function testDatabase(t) {
   const database = new DatabaseSync(':memory:');
@@ -19,6 +24,9 @@ function testDatabase(t) {
     runAsync: async (sql, ...params) => database.prepare(sql).run(...params),
     getFirstAsync: async (sql, ...params) => database.prepare(sql).get(...params) ?? null,
     getAllAsync: async (sql, ...params) => database.prepare(sql).all(...params),
+    withTransactionAsync(operation) {
+      return adapter.withExclusiveTransactionAsync(operation);
+    },
     async withExclusiveTransactionAsync(operation) {
       database.exec('BEGIN IMMEDIATE');
       try {
@@ -35,6 +43,7 @@ function testDatabase(t) {
     runInNewContext(outputText, {
       exports,
       require(module) {
+        if (module === '@/features/activities/routeDistance') return routeDistance;
         assert.equal(module, 'expo-sqlite');
         return { openDatabaseAsync: async () => adapter };
       },

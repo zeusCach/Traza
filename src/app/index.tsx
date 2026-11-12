@@ -6,9 +6,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton, AppCard, EmptyState, ErrorState, LoadingState } from '@/components';
 import { type Activity, type ActivityRoute, loadActivities, saveActivity } from '@/database/activities';
-import { ActivityRouteMap } from '@/features/activities/components/ActivityRouteMap';
 import { activityDateFormat, averageSpeed, formatDistance, formatDuration, formatSpeed } from '@/features/activities/format';
 import { LiveRideMap } from '@/features/tracking/components/LiveRideMap';
+import { RideBasemap } from '@/features/tracking/components/RideBasemap';
 import { RideDataPanel } from '@/features/tracking/components/RideDataPanel';
 import { useActivityTracking } from '@/features/tracking/hooks/useActivityTracking';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -66,6 +66,61 @@ export default function HomeScreen() {
     if (!activity && canStart) void tracking.start();
   }
 
+  if (activity && !showActivities) {
+    return (
+      <LiveRideMap
+        key={activity.startedAt}
+        startedAt={activity.startedAt}
+        running={running}
+        locationMessage={locationMessage}
+        header={(
+          <View style={styles.rideHeader}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Abrir historial de actividades"
+              onPress={() => router.setParams({ section: 'actividades' })}
+              style={({ pressed }) => [styles.historyButton, pressed && styles.pressed]}
+            >
+              <History size={22} color={colors.textPrimary} />
+            </Pressable>
+            <Text accessibilityRole="header" style={styles.rideTitle}>
+              {running ? 'Rodada en curso' : 'Rodada pausada'}
+            </Text>
+          </View>
+        )}
+      >
+        {route => (
+          <>
+            <RideDataPanel
+              route={route}
+              elapsedMs={elapsedMs}
+              distanceM={activity.distanceM}
+              elevationGainM={activity.elevationGainM ?? null}
+              currentSpeedKmh={currentSpeedKmh}
+              running={running}
+            />
+            {tracking.error && (
+              <Text accessibilityRole="alert" style={styles.rideError}>{tracking.error}</Text>
+            )}
+            {saveError && !running && (
+              <Text accessibilityRole="alert" style={styles.rideError}>
+                No pudimos guardar la rodada. Puedes intentarlo de nuevo.
+              </Text>
+            )}
+            {running ? (
+              <AppButton label="Pausar" icon={Pause} onPress={tracking.pause} loading={busy} />
+            ) : (
+              <>
+                <AppButton label="Reanudar" icon={Play} onPress={tracking.resume} disabled={saving} loading={busy} />
+                <AppButton label="Guardar rodada" variant="secondary" onPress={save} loading={saving} disabled={busy} />
+              </>
+            )}
+          </>
+        )}
+      </LiveRideMap>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.screen}>
       {!showActivities ? (
@@ -73,7 +128,7 @@ export default function HomeScreen() {
           <View style={styles.header}>
             <Text style={styles.brand}>TRAZA</Text>
             <Text accessibilityRole="header" style={styles.title}>
-              {activity ? (running ? 'Rodada en curso' : 'Rodada pausada') : 'Tu próxima rodada'}
+              Tu próxima rodada
             </Text>
             {!tracking.ready && (
               tracking.error ? (
@@ -87,38 +142,10 @@ export default function HomeScreen() {
             {tracking.ready && tracking.error && (
               <Text accessibilityRole="alert" style={styles.error}>{tracking.error}</Text>
             )}
-            {activity ? (
-              <>
-                <LiveRideMap
-                  key={`map-${activity.startedAt}`}
-                  startedAt={activity.startedAt}
-                  running={running}
-                  locationMessage={locationMessage}
-                />
-                {running ? (
-                  <AppButton label="Pausar" icon={Pause} onPress={tracking.pause} loading={busy} />
-                ) : (
-                  <>
-                    <AppButton label="Reanudar" icon={Play} onPress={tracking.resume} disabled={saving} loading={busy} />
-                    <AppButton label="Guardar rodada" variant="secondary" onPress={save} loading={saving} disabled={busy} />
-                  </>
-                )}
-                {saveError && (
-                  <Text accessibilityRole="alert" style={styles.error}>
-                    No pudimos guardar la rodada. Puedes intentarlo de nuevo.
-                  </Text>
-                )}
-                <RideDataPanel
-                  key={`data-${activity.startedAt}`}
-                  elapsedMs={elapsedMs}
-                  distanceM={activity.distanceM}
-                  currentSpeedKmh={currentSpeedKmh}
-                />
-              </>
-            ) : tracking.ready && (
+            {tracking.ready && (
               <>
                 <View style={styles.idleMap}>
-                  <ActivityRouteMap route={emptyRoute} live />
+                  <RideBasemap route={emptyRoute} />
                 </View>
                 <Text style={styles.body}>Toca + para comenzar una rodada. Activa la ubicación en segundo plano para registrar con la pantalla bloqueada.</Text>
               </>
@@ -212,6 +239,31 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  rideHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  historyButton: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.pill,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rideTitle: {
+    flexShrink: 1,
+    ...typography.subtitle,
+    color: colors.textPrimary,
+    backgroundColor: colors.background,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  rideError: {
+    ...typography.bodySmall,
+    color: colors.error,
+    backgroundColor: colors.background,
+    padding: spacing.sm,
+    borderRadius: radius.md,
+  },
   screen: { flex: 1, backgroundColor: colors.background },
   page: { flex: 1 },
   content: { padding: spacing.lg, width: '100%', maxWidth: 600, alignSelf: 'center' },
