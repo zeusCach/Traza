@@ -14,6 +14,7 @@
     },
     "android": {
       "package": "mx.traza.app",
+      "versionCode": 2,
       "adaptiveIcon": {
         "backgroundColor": "#101816",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -62,6 +63,12 @@
         "projectId": "91f4de07-ec29-4368-b7b8-2b1875c522c9"
       }
     },
-    "owner": "zeuscach"
+    "owner": "zeuscach",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/91f4de07-ec29-4368-b7b8-2b1875c522c9"
+    }
   }
 }
