@@ -1,9 +1,9 @@
-import { Camera, type CameraRef, GeoJSONSource, type GeoJSONSourceProps, Layer, type LngLat, Map, RasterDEMSource } from '@maplibre/maplibre-react-native';
-import { LocateFixed, Mountain, RefreshCw } from 'lucide-react-native';
+import { Camera, type CameraRef, GeoJSONSource, type GeoJSONSourceProps, type InitialViewState, Layer, type LngLat, Map, RasterDEMSource } from '@maplibre/maplibre-react-native';
+import { LocateFixed, Maximize, Mountain, RefreshCw } from 'lucide-react-native';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { RoutePoint } from '@/database/activities';
+import type { ActivityRoute, RoutePoint } from '@/database/activities';
 import { ActivityRouteMap } from '@/features/activities/components/ActivityRouteMap';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -18,7 +18,32 @@ function coordinates(point: RoutePoint): LngLat {
   return [point.longitude, point.latitude];
 }
 
-export default memo(function NativeRideBasemap({ route, viewport }: RideBasemapProps) {
+function routeView(route: ActivityRoute): InitialViewState {
+  const origin = route.find(segment => segment.length)?.[0];
+  if (!origin) return initialView;
+  let west = origin.longitude;
+  let east = west;
+  let south = origin.latitude;
+  let north = south;
+  for (const segment of route) {
+    for (const point of segment) {
+      const longitude = origin.longitude + ((point.longitude - origin.longitude + 540) % 360 - 180);
+      west = Math.min(west, longitude);
+      east = Math.max(east, longitude);
+      south = Math.min(south, point.latitude);
+      north = Math.max(north, point.latitude);
+    }
+  }
+  if (Math.max(east - west, north - south) < 0.0005) {
+    return { center: [((west + east) / 2 + 540) % 360 - 180, (south + north) / 2], zoom: rideZoom };
+  }
+  return { bounds: [west, south, east, north], padding: { top: 24, right: 24, bottom: 24, left: 24 } };
+}
+
+export default memo(function NativeRideBasemap({ route, viewport, variant = 'live' }: RideBasemapProps) {
+  const live = variant === 'live';
+  const preview = variant === 'preview';
+  const view = useMemo(() => live ? initialView : routeView(route), [live, route]);
   const camera = useRef<CameraRef>(null);
   const centered = useRef(false);
   const [ready, setReady] = useState(false);
@@ -26,10 +51,10 @@ export default memo(function NativeRideBasemap({ route, viewport }: RideBasemapP
   const [relief, setRelief] = useState(true);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const latest = route.at(-1)?.at(-1);
+  const latest = live ? route.at(-1)?.at(-1) : undefined;
   const data = useMemo<GeoJSONSourceProps['data']>(() => ({
     type: 'FeatureCollection',
-    features: route.map(segment => ({
+    features: route.filter(segment => segment.length > 0).map(segment => ({
       type: 'Feature',
       properties: {},
       geometry: segment.length === 1
@@ -66,10 +91,19 @@ export default memo(function NativeRideBasemap({ route, viewport }: RideBasemapP
     }
   }
 
+  function fitRoute() {
+    if ('bounds' in view && view.bounds) {
+      camera.current?.fitBounds(view.bounds, { padding: view.padding, duration: 300 });
+    } else if ('center' in view && view.center) {
+      camera.current?.easeTo({ center: view.center, zoom: view.zoom, duration: 300 });
+    }
+  }
+
   if (failed) {
+    if (preview) return <Text style={styles.previewNotice}>Mapa no disponible</Text>;
     return (
       <View style={viewport && styles.fullscreen}>
-        <ActivityRouteMap route={route} live fill={!!viewport} />
+        <ActivityRouteMap route={route} live={live} fill={!!viewport} />
         <Pressable accessibilityRole="button" onPress={() => {
           centered.current = false;
           setAttempt(current => current + 1);
@@ -83,12 +117,19 @@ export default memo(function NativeRideBasemap({ route, viewport }: RideBasemapP
   }
 
   return (
-    <View style={viewport ? styles.fullscreen : styles.frame}>
+    <View style={viewport ? styles.fullscreen : preview ? styles.previewFrame : [styles.frame, !live && styles.activityFrame]}>
       <Map
         key={attempt}
         mapStyle={styleUrl}
         androidView="texture"
         logo={false}
+        dragPan={!preview}
+        touchZoom={!preview}
+        doubleTapZoom={!preview}
+        doubleTapHoldZoom={!preview}
+        touchRotate={!preview}
+        touchPitch={!preview}
+        compass={!preview}
         contentInset={viewport}
         attributionPosition={viewport ? { top: viewport.top + 8, right: viewport.right + 8 } : { top: 8, left: 8 }}
         compassPosition={viewport ? { top: viewport.top + 8, right: viewport.right + 48 } : { top: 8, right: 8 }}
@@ -98,11 +139,11 @@ export default memo(function NativeRideBasemap({ route, viewport }: RideBasemapP
           setFailed(true);
         }}
         onRegionWillChange={({ nativeEvent }) => {
-          if (nativeEvent.userInteraction) setFollowing(false);
+          if (live && nativeEvent.userInteraction) setFollowing(false);
         }}
       >
-        <Camera ref={camera} initialViewState={initialView} />
-        {relief && (
+        <Camera ref={camera} initialViewState={view} />
+        {!preview && relief && (
           <RasterDEMSource
             id="ride-elevation"
             tiles={terrainTiles}
@@ -134,7 +175,7 @@ export default memo(function NativeRideBasemap({ route, viewport }: RideBasemapP
           />
           <Layer id="ride-track-points" type="circle" paint={{ 'circle-color': colors.primary, 'circle-radius': 3 }} />
         </GeoJSONSource>
-        <GeoJSONSource id="ride-position" data={position}>
+        {live && <GeoJSONSource id="ride-position" data={position}>
           <Layer
             id="ride-position-marker"
             type="circle"
@@ -145,9 +186,9 @@ export default memo(function NativeRideBasemap({ route, viewport }: RideBasemapP
               'circle-stroke-color': '#FFFFFF',
             }}
           />
-        </GeoJSONSource>
+        </GeoJSONSource>}
       </Map>
-      <View style={[
+      {!preview && <View style={[
         styles.controls,
         viewport
           ? { top: viewport.top + 56, right: viewport.right + spacing.sm }
@@ -162,7 +203,7 @@ export default memo(function NativeRideBasemap({ route, viewport }: RideBasemapP
         >
           <Mountain size={22} color={relief ? colors.primary : colors.textPrimary} />
         </Pressable>
-        <Pressable
+        {live ? <Pressable
           accessibilityRole="button"
           accessibilityLabel="Centrar en mi posición"
           accessibilityState={{ disabled: !latest }}
@@ -171,14 +212,21 @@ export default memo(function NativeRideBasemap({ route, viewport }: RideBasemapP
           style={[styles.button, !latest && styles.disabled]}
         >
           <LocateFixed size={22} color={following && latest ? colors.primary : colors.textPrimary} />
-        </Pressable>
-      </View>
+        </Pressable> : (
+          <Pressable accessibilityRole="button" accessibilityLabel="Ver recorrido completo" onPress={fitRoute} style={styles.button}>
+            <Maximize size={22} color={colors.textPrimary} />
+          </Pressable>
+        )}
+      </View>}
     </View>
   );
 });
 
 const styles = StyleSheet.create({
   frame: { width: '100%', aspectRatio: 360 / 316, maxHeight: 420, backgroundColor: colors.surface },
+  activityFrame: { aspectRatio: 360 / 252 },
+  previewFrame: { flex: 1, backgroundColor: colors.surface },
+  previewNotice: { ...typography.caption, color: colors.textSecondary, padding: spacing.sm },
   fullscreen: { flex: 1, backgroundColor: colors.surface },
   controls: { position: 'absolute', right: spacing.sm, gap: spacing.xs },
   button: {

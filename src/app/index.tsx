@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton, AppCard, EmptyState, ErrorState, LoadingState } from '@/components';
 import { type Activity, type ActivityRoute, type RideDetails, loadActivities, rideEffortLabels, saveActivity } from '@/database/activities';
+import { ActivityMapPreview } from '@/features/activities/components/ActivityMapPreview';
 import { ProgressPanel } from '@/features/activities/components/ProgressPanel';
 import { RideEditor } from '@/features/activities/components/RideEditor';
 import { activityDateFormat, averageSpeed, formatDistance, formatDuration, formatSpeed } from '@/features/activities/format';
@@ -17,6 +18,7 @@ import { useActivityTracking } from '@/features/tracking/hooks/useActivityTracki
 import { colors, radius, spacing, typography } from '@/theme';
 
 const emptyRoute: ActivityRoute = [];
+const activityViewability = { itemVisiblePercentThreshold: 10, minimumViewTime: 120 };
 
 export default function HomeScreen() {
   const { section, perfil } = useLocalSearchParams<{ section?: string; perfil?: string }>();
@@ -28,6 +30,10 @@ export default function HomeScreen() {
   const [loadError, setLoadError] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [editingRide, setEditingRide] = useState(false);
+  const [visibleActivities, setVisibleActivities] = useState<Set<string>>(() => new Set());
+  const onActivitiesVisible = useCallback(({ viewableItems }: { viewableItems: { key: string }[] }) => {
+    setVisibleActivities(new Set(viewableItems.map(item => item.key)));
+  }, []);
 
   useFocusEffect(useCallback(() => {
     setLoadAttempt(attempt => attempt + 1);
@@ -199,6 +205,11 @@ export default function HomeScreen() {
           style={styles.page}
           data={activities}
           keyExtractor={item => String(item.startedAt)}
+          viewabilityConfig={activityViewability}
+          onViewableItemsChanged={onActivitiesVisible}
+          extraData={visibleActivities}
+          initialNumToRender={4}
+          windowSize={5}
           contentContainerStyle={styles.content}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
@@ -209,9 +220,9 @@ export default function HomeScreen() {
           renderItem={({ item }) => {
             const mean = averageSpeed(item.distanceM, item.durationMs);
             return (
-              <Link href={{ pathname: '/activity/[id]', params: { id: String(item.startedAt) } }} asChild>
-                <Pressable style={({ pressed }) => pressed && styles.pressed}>
-                  <AppCard style={styles.historyCard}>
+              <AppCard style={styles.historyCard}>
+                <Link href={{ pathname: '/activity/[id]', params: { id: String(item.startedAt) } }} asChild>
+                  <Pressable style={({ pressed }) => [styles.historyRow, pressed && styles.pressed]}>
                     <View style={styles.historyMetrics}>
                       <Text style={styles.activityName}>{item.name || 'Rodada'}</Text>
                       <Text style={styles.body}>{activityDateFormat.format(item.startedAt)}{item.effort && ` · ${rideEffortLabels[item.effort]}`}</Text>
@@ -221,9 +232,10 @@ export default function HomeScreen() {
                       {mean !== null && <Text style={styles.body}>{formatSpeed(mean)} km/h de media</Text>}
                     </View>
                     <ChevronRight size={20} color={colors.textSecondary} />
-                  </AppCard>
-                </Pressable>
-              </Link>
+                  </Pressable>
+                </Link>
+                <ActivityMapPreview startedAt={item.startedAt} visible={visibleActivities.has(String(item.startedAt))} />
+              </AppCard>
             );
           }}
         />
@@ -307,7 +319,8 @@ const styles = StyleSheet.create({
   },
   profileSelected: { borderColor: colors.primary },
   activityName: { ...typography.subtitle, color: colors.textPrimary },
-  historyCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  historyCard: { gap: spacing.sm },
+  historyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   historyMetrics: { flex: 1 },
   pressed: { opacity: 0.7 },
   separator: { height: spacing.sm },

@@ -7,12 +7,16 @@ import { colors, spacing, typography } from '@/theme';
 export interface RideBasemapProps {
   route: ActivityRoute;
   viewport?: { top: number; bottom: number; left: number; right: number };
+  variant?: 'live' | 'activity' | 'preview';
 }
 
-export function RideBasemap({ route, viewport }: RideBasemapProps) {
+export function RideBasemap({ route, viewport, variant = 'live' }: RideBasemapProps) {
+  if (variant === 'preview') {
+    return <Text style={styles.notice}>El mapa de calles está disponible en la app móvil.</Text>;
+  }
   return (
     <View style={viewport && styles.fullscreen}>
-      <ActivityRouteMap route={route} live fill={!!viewport} />
+      <ActivityRouteMap route={route} live={variant === 'live'} fill={!!viewport} />
       <Text style={[styles.notice, viewport && styles.floatingNotice]}>
         Abre Traza en Android o iOS para ver el mapa de calles y relieve.
       </Text>

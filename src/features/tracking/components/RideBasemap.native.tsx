@@ -9,8 +9,8 @@ import type { RideBasemapProps } from './RideBasemap';
 
 const NativeRideBasemap = lazy(() => import('./NativeRideBasemap'));
 
-export function RideBasemap({ route, viewport }: RideBasemapProps) {
-  const fallback = <ActivityRouteMap route={route} live fill={!!viewport} />;
+export function RideBasemap({ route, viewport, variant = 'live' }: RideBasemapProps) {
+  const fallback = variant === 'preview' ? null : <ActivityRouteMap route={route} live={variant === 'live'} fill={!!viewport} />;
   const expoGo = isRunningInExpoGo();
   if (expoGo || !TurboModuleRegistry.get('MLRNLocationModule')) {
     return (
@@ -26,7 +26,7 @@ export function RideBasemap({ route, viewport }: RideBasemapProps) {
   }
   return (
     <Suspense fallback={fallback}>
-      <NativeRideBasemap route={route} viewport={viewport} />
+      <NativeRideBasemap route={route} viewport={viewport} variant={variant} />
     </Suspense>
   );
 }

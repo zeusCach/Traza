@@ -6,11 +6,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton, AppCard, EmptyState, ErrorState, LoadingState, MetricCard } from '@/components';
 import { type Activity, type ActivityRoute, type RideDetails, loadActivities, loadActivityRoute, rideEffortLabels, updateRideDetails } from '@/database/activities';
-import { ActivityRouteMap } from '@/features/activities/components/ActivityRouteMap';
 import { ElevationProfile } from '@/features/activities/components/ElevationProfile';
 import { RideEditor } from '@/features/activities/components/RideEditor';
 import { RideShareCard } from '@/features/activities/components/RideShareCard';
 import { activityDateFormat, averageSpeed, formatDistance, formatDuration, formatElevationGain, formatSpeed } from '@/features/activities/format';
+import { RideBasemap } from '@/features/tracking/components/RideBasemap';
 import { colors, spacing, typography } from '@/theme';
 
 type SummaryState =
@@ -121,7 +121,7 @@ function ActivitySummary({ startedAt }: { startedAt: number }) {
         {route === null ? (
           <ErrorState title="No pudimos abrir el recorrido" message="Las métricas de la rodada siguen disponibles." onRetry={retry} />
         ) : route.some(segment => segment.length > 0) ? (
-          <ActivityRouteMap route={route} />
+          <RideBasemap route={route} variant="activity" />
         ) : (
           <EmptyState icon={Route} title="Sin recorrido GPS" message="Esta rodada se guardó sin puntos GPS." />
         )}
