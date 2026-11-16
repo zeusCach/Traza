@@ -11,6 +11,7 @@ import {
   loadDraftRoute,
   loadRideDraft,
   pauseRideDraft,
+  rideElapsedMs,
   setSegmentToForeground,
   type RecordingMode,
   type RideDraft,
@@ -109,15 +110,17 @@ export function useActivityTracking() {
   }, [attempt]);
 
   const runCommand = useCallback(async (operation: () => Promise<void>) => {
-    if (changing.current) return;
+    if (changing.current) return false;
     changing.current = true;
     revision.current += 1;
     setBusy(true);
     setError(null);
     try {
       await operation();
+      return true;
     } catch {
       setError('No pudimos actualizar la rodada. Intenta de nuevo.');
+      return false;
     } finally {
       changing.current = false;
       setBusy(false);
@@ -238,10 +241,13 @@ export function useActivityTracking() {
   }
 
   const running = segmentStart !== null;
+  const autoPaused = running && draft?.activeSince === null;
   let locationMessage = recovered ? 'Recuperamos tu rodada. Puedes reanudarla o guardarla.' : null;
   if (running && draft) {
     if (mode === 'timer') {
       locationMessage = 'Ubicación no disponible. Solo se registrará el tiempo con la app abierta.';
+    } else if (autoPaused) {
+      locationMessage = 'La rodada se reanudará cuando vuelvas a moverte.';
     } else if (locationFailed) {
       locationMessage = 'Se perdió la ubicación. El cronómetro sigue activo.';
     } else if (mode === 'foreground') {
@@ -259,10 +265,11 @@ export function useActivityTracking() {
       elevationGainM: draft.elevationGainM,
     },
     running,
+    autoPaused,
     segment: draft?.segment ?? 0,
     lastFixAt: draft?.lastFixAt ?? null,
-    elapsedMs: (draft?.durationMs ?? 0) + (segmentStart === null ? 0 : Math.max(0, now - segmentStart)),
-    currentSpeedKmh: running && !locationFailed && draft?.lastFixAt != null && now - draft.lastFixAt < speedMaxAgeMs
+    elapsedMs: draft ? rideElapsedMs(draft, now) : 0,
+    currentSpeedKmh: running && !autoPaused && !locationFailed && draft?.lastFixAt != null && now - draft.lastFixAt < speedMaxAgeMs
       ? draft.speedKmh
       : null,
     ready,

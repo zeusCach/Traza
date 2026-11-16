@@ -11,6 +11,8 @@ export interface RideDraft extends Activity {
   mode: RecordingMode;
   segment: number;
   segmentStart: number | null;
+  activeSince: number | null;
+  stationarySince: number | null;
   checkpointAt: number;
   lastFixAt: number | null;
   speedKmh: number | null;
@@ -20,6 +22,9 @@ export interface RideDraft extends Activity {
 
 let database: Promise<SQLiteDatabase> | undefined;
 let pendingWrite = Promise.resolve();
+const stationaryDelayMs = 8_000;
+const maxFixGapMs = 5_000;
+const motionSpeedKmh = 1.8;
 
 function openDraftDatabase() {
   database ??= openDatabaseAsync('traza-ride-draft.db').then(async db => {
@@ -55,7 +60,15 @@ function openDraftDatabase() {
         `);
       }
       if (schemaVersion < 2) {
-        await db.execAsync('ALTER TABLE points ADD COLUMN altitudeM REAL; PRAGMA user_version = 2;');
+        await db.execAsync('ALTER TABLE points ADD COLUMN altitudeM REAL;');
+      }
+      if (schemaVersion < 3) {
+        await db.execAsync(`
+          ALTER TABLE draft ADD COLUMN activeSince INTEGER;
+          ALTER TABLE draft ADD COLUMN stationarySince INTEGER;
+          UPDATE draft SET activeSince = segmentStart;
+          PRAGMA user_version = 3;
+        `);
       }
     });
     return db;
@@ -92,13 +105,14 @@ export function beginRideSegment(mode: RecordingMode, now: number) {
     const draft = await readDraft(db);
     if (draft?.segmentStart != null) return draft;
     await db.runAsync(`
-      INSERT INTO draft (id, startedAt, durationMs, mode, segment, segmentStart, checkpointAt)
-      VALUES (1, ?, 0, ?, 1, ?, ?)
+      INSERT INTO draft (id, startedAt, durationMs, mode, segment, segmentStart, activeSince, checkpointAt)
+      VALUES (1, ?, 0, ?, 1, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         mode = excluded.mode, segment = draft.segment + 1,
-        segmentStart = excluded.segmentStart, checkpointAt = excluded.checkpointAt,
+        segmentStart = excluded.segmentStart, activeSince = excluded.activeSince, checkpointAt = excluded.checkpointAt,
+        stationarySince = NULL,
         lastFixAt = NULL, speedKmh = NULL, lastAltitudeM = NULL
-    `, now, mode, now, now);
+    `, now, mode, now, now, now);
     return (await readDraft(db))!;
   });
 }
@@ -116,12 +130,16 @@ export function setSegmentToForeground(segmentStart: number) {
 export function pauseRideDraft(stoppedAt?: number) {
   return write(async db => {
     await db.runAsync(`
-      UPDATE draft SET durationMs = durationMs + MAX(0, COALESCE(?, checkpointAt) - segmentStart),
-        segmentStart = NULL, lastFixAt = NULL, speedKmh = NULL
+      UPDATE draft SET durationMs = durationMs + COALESCE(MAX(0, COALESCE(?, checkpointAt) - activeSince), 0),
+        segmentStart = NULL, activeSince = NULL, stationarySince = NULL, lastFixAt = NULL, speedKmh = NULL
       WHERE id = 1 AND segmentStart IS NOT NULL
     `, stoppedAt ?? null);
     return readDraft(db);
   });
+}
+
+export function rideElapsedMs(draft: RideDraft, now: number) {
+  return draft.durationMs + (draft.activeSince === null ? 0 : Math.max(0, now - draft.activeSince));
 }
 
 export function checkpointRide(segmentStart: number, now: number) {
@@ -192,16 +210,39 @@ export function appendRideLocations(locations: LocationObject[], source: 'backgr
         !(Math.abs(coords.latitude) <= 90) || !(Math.abs(coords.longitude) <= 180)) {
         continue;
       }
+      const fixGap = timestamp - (draft.lastFixAt ?? timestamp);
       draft.lastFixAt = timestamp;
       const speed = coords.speed;
       draft.speedKmh = speed !== null && Number.isFinite(speed) && speed >= 0 ? speed * 3.6 : null;
       const altitude = coords.altitude;
       const altitudeM = altitude !== null && Number.isFinite(altitude) ? altitude : null;
       const point = { latitude: coords.latitude, longitude: coords.longitude, timestamp, altitudeM };
-      const distance = previous ? distanceBetween(previous, point) : 0;
+      let distance = previous ? distanceBetween(previous, point) : 0;
+      const moving = draft.speedKmh !== null
+        ? draft.speedKmh >= motionSpeedKmh
+        : distance >= Math.max(8, coords.accuracy * 1.5);
+
+      if (moving) {
+        draft.stationarySince = null;
+        if (draft.activeSince === null) {
+          draft.activeSince = timestamp;
+          draft.segment += 1;
+          draft.lastAltitudeM = null;
+          previous = null;
+          distance = 0;
+        }
+      } else {
+        if (draft.activeSince === null) continue;
+        if (draft.stationarySince === null || fixGap > maxFixGapMs) draft.stationarySince = timestamp;
+        if (timestamp - draft.stationarySince >= stationaryDelayMs) {
+          draft.durationMs += Math.max(0, draft.stationarySince - draft.activeSince);
+          draft.activeSince = null;
+          draft.stationarySince = null;
+        }
+        if (previous) continue;
+      }
       // Keep short turns and slow movement when the device reports motion.
-      const minimumDistance = draft.speedKmh === null ? 2 : draft.speedKmh >= 1.8 ? 1 : 5;
-      if (previous && distance < minimumDistance) continue;
+      if (previous && distance < 1) continue;
       await db.runAsync(
         'INSERT INTO points (segment, timestamp, latitude, longitude, altitudeM) VALUES (?, ?, ?, ?, ?)',
         draft.segment, timestamp, point.latitude, point.longitude, altitudeM,
@@ -220,9 +261,9 @@ export function appendRideLocations(locations: LocationObject[], source: 'backgr
     }
     await db.runAsync(`
       UPDATE draft SET checkpointAt = ?, lastFixAt = ?, speedKmh = ?, distanceM = ?,
-        elevationGainM = ?, lastAltitudeM = ?
+        elevationGainM = ?, lastAltitudeM = ?, durationMs = ?, segment = ?, activeSince = ?, stationarySince = ?
       WHERE id = 1
     `, draft.checkpointAt, draft.lastFixAt, draft.speedKmh, draft.distanceM,
-    draft.elevationGainM, draft.lastAltitudeM);
+    draft.elevationGainM, draft.lastAltitudeM, draft.durationMs, draft.segment, draft.activeSince, draft.stationarySince);
   });
 }

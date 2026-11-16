@@ -65,12 +65,16 @@ export default function HomeScreen() {
     router.push({ pathname: '/activity/[id]', params: { id: String(activity.startedAt) } });
   }
 
-  const { activity, busy, currentSpeedKmh, elapsedMs, locationMessage, running } = tracking;
+  const { activity, autoPaused, busy, currentSpeedKmh, elapsedMs, locationMessage, running } = tracking;
   const canStart = tracking.ready && activities !== null && !busy;
 
   function openRide() {
     router.setParams({ section: 'mapas' });
     if (!activity && canStart) void tracking.start();
+  }
+
+  async function finishAutoPausedRide() {
+    if (await tracking.pause()) setEditingRide(true);
   }
 
   if (activity && !showProfile) {
@@ -94,7 +98,7 @@ export default function HomeScreen() {
                 <History size={22} color={colors.textPrimary} />
               </Pressable>
               <Text accessibilityRole="header" style={styles.rideTitle}>
-                {running ? 'Rodada en curso' : 'Rodada pausada'}
+                {autoPaused ? 'Pausa automática' : running ? 'Rodada en curso' : 'Rodada pausada'}
               </Text>
             </View>
           )}
@@ -107,12 +111,17 @@ export default function HomeScreen() {
                 distanceM={activity.distanceM}
                 elevationGainM={activity.elevationGainM ?? null}
                 currentSpeedKmh={currentSpeedKmh}
-                running={running}
+                running={running && !autoPaused}
               />
               {tracking.error && (
                 <Text accessibilityRole="alert" style={styles.rideError}>{tracking.error}</Text>
               )}
-              {running ? (
+              {autoPaused ? (
+                <>
+                  <AppButton label="Pausar manualmente" icon={Pause} onPress={tracking.pause} loading={busy} />
+                  <AppButton label="Guardar rodada" variant="secondary" onPress={finishAutoPausedRide} disabled={busy} />
+                </>
+              ) : running ? (
                 <AppButton label="Pausar" icon={Pause} onPress={tracking.pause} loading={busy} />
               ) : (
                 <>

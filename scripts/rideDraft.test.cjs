@@ -147,3 +147,60 @@ test('records short movements and filters nearby fixes when stopped', async t =>
   assert.ok(draft.distanceM > 4 && draft.distanceM < 5);
   assert.equal(draft.speedKmh, 0);
 });
+
+test('automatically pauses from the first stationary fix and resumes in a new route segment', async t => {
+  const store = testDatabase(t)();
+  await store.beginRideSegment('background', 1_000);
+  await store.appendRideLocations([
+    location(1_000, 21),
+    location(2_000, 21.001),
+    ...Array.from({ length: 9 }, (_, index) => location(3_000 + index * 1_000, 21.0011, 5, 0)),
+  ], 'background');
+
+  const paused = await store.loadRideDraft();
+  assert.equal(paused.segmentStart, 1_000);
+  assert.equal(paused.activeSince, null);
+  assert.equal(store.rideElapsedMs(paused, 15_000), 2_000);
+  assert.equal((await store.loadDraftRoute())[0].length, 2);
+  await store.checkpointRide(1_000, 15_000);
+
+  await store.appendRideLocations([location(16_000, 21.0011), location(17_000, 21.0021)], 'background');
+  const resumed = await store.loadRideDraft();
+  assert.equal(resumed.activeSince, 16_000);
+  assert.equal(store.rideElapsedMs(resumed, 18_000), 4_000);
+  assert.ok(Math.abs(resumed.distanceM - 2 * paused.distanceM) < 0.01);
+  assert.equal(JSON.stringify((await store.loadDraftRoute()).map(segment => segment.map(point => point.timestamp))),
+    '[[1000,2000],[16000,17000]]');
+  assert.equal((await store.pauseRideDraft(18_000)).durationMs, 4_000);
+});
+
+test('does not interpret poor GPS or gaps in fixes as continuous stationary time', async t => {
+  const store = testDatabase(t)();
+  await store.beginRideSegment('foreground', 1_000);
+  await store.appendRideLocations([
+    location(1_000, 21, 5, 0),
+    location(3_000, 21, 50, 0),
+    location(8_000, 21, 50, 0),
+    location(10_000, 21, 5, 0),
+    location(12_000, 21.00004, 5, 2),
+    location(16_000, 21.00004, 5, 0),
+    location(20_000, 21.00008, 5, 2),
+  ], 1_000);
+  const active = await store.loadRideDraft();
+  assert.equal(active.activeSince, 1_000);
+  assert.equal(store.rideElapsedMs(active, 20_000), 19_000);
+});
+
+test('manual pause during an automatic pause prevents motion from resuming the ride', async t => {
+  const store = testDatabase(t)();
+  await store.beginRideSegment('foreground', 1_000);
+  await store.appendRideLocations([
+    location(1_000, 21),
+    ...Array.from({ length: 9 }, (_, index) => location(2_000 + index * 1_000, 21, 5, 0)),
+  ], 1_000);
+  const paused = await store.pauseRideDraft(15_000);
+  assert.equal(paused.segmentStart, null);
+  assert.equal(paused.durationMs, 1_000);
+  await store.appendRideLocations([location(16_000, 21.001)], 1_000);
+  assert.equal((await store.loadRideDraft()).segmentStart, null);
+});
