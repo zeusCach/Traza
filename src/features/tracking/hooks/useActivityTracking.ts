@@ -1,6 +1,6 @@
 import * as Location from 'expo-location';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState } from 'react-native';
+import { Alert, AppState, Platform } from 'react-native';
 
 import { loadActivities } from '@/database/activities';
 import {
@@ -25,6 +25,19 @@ import {
 
 const speedMaxAgeMs = 5_000;
 const checkpointIntervalMs = 5_000;
+
+async function checkLocationServices() {
+  if (await Location.hasServicesEnabledAsync()) return true;
+
+  const title = 'Ubicación desactivada';
+  const message = 'Activa la ubicación para sincronizar el recorrido.';
+  if (Platform.OS === 'web') {
+    globalThis.alert(`${title}\n\n${message}`);
+  } else {
+    Alert.alert(title, message, [{ text: 'Entendido' }]);
+  }
+  return false;
+}
 
 async function recordingMode(): Promise<RecordingMode> {
   try {
@@ -114,7 +127,10 @@ export function useActivityTracking() {
   function begin() {
     if (!ready || draft?.segmentStart != null) return;
     return runCommand(async () => {
+      if (!(await checkLocationServices())) return;
       const mode = await recordingMode();
+      // The permission flow can take the user to system settings.
+      if (!(await checkLocationServices())) return;
       await stopBackgroundLocation();
       const startTime = Date.now();
       let started = await beginRideSegment(mode, startTime);
@@ -243,6 +259,8 @@ export function useActivityTracking() {
       elevationGainM: draft.elevationGainM,
     },
     running,
+    segment: draft?.segment ?? 0,
+    lastFixAt: draft?.lastFixAt ?? null,
     elapsedMs: (draft?.durationMs ?? 0) + (segmentStart === null ? 0 : Math.max(0, now - segmentStart)),
     currentSpeedKmh: running && !locationFailed && draft?.lastFixAt != null && now - draft.lastFixAt < speedMaxAgeMs
       ? draft.speedKmh

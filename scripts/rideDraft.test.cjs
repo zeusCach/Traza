@@ -52,8 +52,8 @@ function testDatabase(t) {
   };
 }
 
-function location(timestamp, latitude, accuracy = 5) {
-  return { timestamp, coords: { latitude, longitude: -86, accuracy, speed: 6 } };
+function location(timestamp, latitude, accuracy = 5, speed = 6) {
+  return { timestamp, coords: { latitude, longitude: -86, accuracy, speed } };
 }
 
 test('preserves paused time and separates resumed background segments', async t => {
@@ -120,6 +120,7 @@ test('loads only new map points from the selected draft and preserves segment bo
   assert.equal(first.length, 2);
   assert.equal((await store.loadDraftRoutePoints(1_000, first[1])).length, 0);
   assert.equal((await store.loadDraftRoutePoints(2_000)).length, 0);
+  assert.equal((await store.loadDraftRoutePoints(1_000, undefined, first[0])).length, 1);
 
   await store.pauseRideDraft(3_000);
   await store.beginRideSegment('background', 4_000);
@@ -128,4 +129,21 @@ test('loads only new map points from the selected draft and preserves segment bo
   assert.equal(next.length, 1);
   assert.equal(next[0].segment, 2);
   assert.equal(next[0].timestamp, 4_000);
+});
+
+test('records short movements and filters nearby fixes when stopped', async t => {
+  const store = testDatabase(t)();
+  await store.beginRideSegment('foreground', 1_000);
+  await store.appendRideLocations([
+    location(1_000, 21),
+    location(2_000, 21.00002, 5, 2),
+    location(3_000, 21.00004, 5, 2),
+    location(4_000, 21.00006, 5, 0),
+  ], 1_000);
+
+  const [route] = await store.loadDraftRoute();
+  const draft = await store.loadRideDraft();
+  assert.equal(JSON.stringify(route.map(point => point.timestamp)), '[1000,2000,3000]');
+  assert.ok(draft.distanceM > 4 && draft.distanceM < 5);
+  assert.equal(draft.speedKmh, 0);
 });

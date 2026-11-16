@@ -142,14 +142,17 @@ export type DraftRoutePoint = RoutePoint & { segment: number };
 export async function loadDraftRoutePoints(
   startedAt: number,
   after?: Pick<DraftRoutePoint, 'segment' | 'timestamp'>,
+  through?: Pick<DraftRoutePoint, 'segment' | 'timestamp'>,
 ) {
   const db = await openDraftDatabase();
   return db.getAllAsync<DraftRoutePoint>(`
     SELECT segment, timestamp, latitude, longitude, altitudeM FROM points
     WHERE (segment, timestamp) > (?, ?)
+      AND (segment, timestamp) <= (?, ?)
       AND EXISTS (SELECT 1 FROM draft WHERE startedAt = ?)
     ORDER BY segment, timestamp
-  `, after?.segment ?? 0, after?.timestamp ?? 0, startedAt);
+  `, after?.segment ?? 0, after?.timestamp ?? 0,
+  through?.segment ?? Number.MAX_SAFE_INTEGER, through?.timestamp ?? 0, startedAt);
 }
 
 export async function loadDraftRoute(): Promise<ActivityRoute> {
@@ -196,7 +199,9 @@ export function appendRideLocations(locations: LocationObject[], source: 'backgr
       const altitudeM = altitude !== null && Number.isFinite(altitude) ? altitude : null;
       const point = { latitude: coords.latitude, longitude: coords.longitude, timestamp, altitudeM };
       const distance = previous ? distanceBetween(previous, point) : 0;
-      if (previous && distance < 5) continue;
+      // Keep short turns and slow movement when the device reports motion.
+      const minimumDistance = draft.speedKmh === null ? 2 : draft.speedKmh >= 1.8 ? 1 : 5;
+      if (previous && distance < minimumDistance) continue;
       await db.runAsync(
         'INSERT INTO points (segment, timestamp, latitude, longitude, altitudeM) VALUES (?, ?, ?, ?, ?)',
         draft.segment, timestamp, point.latitude, point.longitude, altitudeM,

@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "mx.traza.app",
-      "versionCode": 2,
+      "versionCode": 4,
       "adaptiveIcon": {
         "backgroundColor": "#101816",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -48,7 +48,16 @@
         }
       ],
       "expo-sqlite",
-      "@maplibre/maplibre-react-native"
+      "@maplibre/maplibre-react-native",
+      "expo-sharing",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": false,
+          "savePhotosPermission": "TRAZA guarda los PNG de tus rodadas en la galería.",
+          "granularPermissions": []
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

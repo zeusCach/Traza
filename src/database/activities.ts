@@ -1,6 +1,22 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export interface Activity {
+export const rideEfforts = ['normal', 'moderate', 'competitive', 'hard'] as const;
+export type RideEffort = typeof rideEfforts[number];
+export const rideEffortLabels: Record<RideEffort, string> = {
+  normal: 'Normal',
+  moderate: 'Moderado',
+  competitive: 'Competitivo',
+  hard: 'Difícil',
+};
+
+export interface RideDetails {
+  name?: string;
+  effort?: RideEffort;
+}
+
+export const rideNameLimit = 80;
+
+export interface Activity extends RideDetails {
   startedAt: number;
   durationMs: number;
   distanceM: number | null;
@@ -39,6 +55,8 @@ function isActivity(value: unknown): value is Activity {
   return (
     typeof activity.startedAt === 'number' && Number.isFinite(activity.startedAt) &&
     typeof activity.durationMs === 'number' && Number.isFinite(activity.durationMs) &&
+    (activity.name === undefined || typeof activity.name === 'string') &&
+    (activity.effort === undefined || rideEfforts.includes(activity.effort)) &&
     (activity.distanceM === null ||
       (typeof activity.distanceM === 'number' && Number.isFinite(activity.distanceM))) &&
     (activity.elevationGainM == null ||
@@ -65,11 +83,34 @@ function isRoutePoint(value: unknown): value is RoutePoint {
     (altitudeM == null || Number.isFinite(altitudeM));
 }
 
-export async function saveActivity(activity: Activity, route: ActivityRoute, history: Activity[]) {
-  const updated = [activity, ...history.filter(item => item.startedAt !== activity.startedAt)];
-  if (route.length > 0) {
-    await AsyncStorage.setItem(routeKey(activity.startedAt), JSON.stringify(route));
-  }
-  await AsyncStorage.setItem(key, JSON.stringify(updated));
-  return updated;
+let pendingWrite = Promise.resolve();
+
+function writeHistory<T>(operation: () => Promise<T>) {
+  const result = pendingWrite.then(operation);
+  pendingWrite = result.then(() => undefined, () => undefined);
+  return result;
+}
+
+export function saveActivity(activity: Activity, route: ActivityRoute) {
+  return writeHistory(async () => {
+    const history = await loadActivities();
+    const updated = [activity, ...history.filter(item => item.startedAt !== activity.startedAt)];
+    if (route.length > 0) {
+      await AsyncStorage.setItem(routeKey(activity.startedAt), JSON.stringify(route));
+    }
+    await AsyncStorage.setItem(key, JSON.stringify(updated));
+    return updated;
+  });
+}
+
+export function updateRideDetails(startedAt: number, details: RideDetails) {
+  return writeHistory(async () => {
+    const history = await loadActivities();
+    const index = history.findIndex(item => item.startedAt === startedAt);
+    if (index < 0) throw new Error('Rodada no encontrada');
+    const activity = { ...history[index], ...details };
+    history[index] = activity;
+    await AsyncStorage.setItem(key, JSON.stringify(history));
+    return activity;
+  });
 }

@@ -1,11 +1,14 @@
-import { Link, router, useLocalSearchParams } from 'expo-router';
-import { ChevronRight, History, Map, Pause, Play, Plus } from 'lucide-react-native';
-import { useEffect, useRef, useState } from 'react';
+import { Link, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useUpdates } from 'expo-updates';
+import { ChartNoAxesCombined, ChevronRight, Download, History, Map, Pause, Play, Plus, User } from 'lucide-react-native';
+import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton, AppCard, EmptyState, ErrorState, LoadingState } from '@/components';
-import { type Activity, type ActivityRoute, loadActivities, saveActivity } from '@/database/activities';
+import { type Activity, type ActivityRoute, type RideDetails, loadActivities, rideEffortLabels, saveActivity } from '@/database/activities';
+import { ProgressPanel } from '@/features/activities/components/ProgressPanel';
+import { RideEditor } from '@/features/activities/components/RideEditor';
 import { activityDateFormat, averageSpeed, formatDistance, formatDuration, formatSpeed } from '@/features/activities/format';
 import { LiveRideMap } from '@/features/tracking/components/LiveRideMap';
 import { RideBasemap } from '@/features/tracking/components/RideBasemap';
@@ -16,20 +19,28 @@ import { colors, radius, spacing, typography } from '@/theme';
 const emptyRoute: ActivityRoute = [];
 
 export default function HomeScreen() {
-  const { section } = useLocalSearchParams<{ section?: string }>();
-  const showActivities = section === 'actividades';
+  const { section, perfil } = useLocalSearchParams<{ section?: string; perfil?: string }>();
+  const showProfile = section === 'tu' || section === 'actividades';
+  const showActivities = perfil === 'actividades' || section === 'actividades';
   const tracking = useActivityTracking();
+  const { isUpdateAvailable, isUpdatePending } = useUpdates();
   const [activities, setActivities] = useState<Activity[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
-  const [saveError, setSaveError] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const savePending = useRef(false);
+  const [editingRide, setEditingRide] = useState(false);
+
+  useFocusEffect(useCallback(() => {
+    setLoadAttempt(attempt => attempt + 1);
+  }, []));
 
   useEffect(() => {
+    if (loadAttempt === 0) return;
     let active = true;
     loadActivities().then(items => {
-      if (active) setActivities(items);
+      if (active) {
+        setActivities(items.sort((a, b) => b.startedAt - a.startedAt));
+        setLoadError(false);
+      }
     }).catch(() => {
       if (active) setLoadError(true);
     });
@@ -38,23 +49,13 @@ export default function HomeScreen() {
     };
   }, [loadAttempt]);
 
-  async function save() {
+  async function save(details: RideDetails) {
     const activity = tracking.activity;
-    if (savePending.current || tracking.busy || tracking.running || !activity || !activities) return;
-    savePending.current = true;
-    setSaving(true);
-    setSaveError(false);
-    try {
-      const updated = await saveActivity(activity, await tracking.getRoute(), activities);
-      await tracking.reset();
-      setActivities(updated);
-    } catch {
-      setSaveError(true);
-      return;
-    } finally {
-      savePending.current = false;
-      setSaving(false);
-    }
+    if (tracking.busy || tracking.running || !activity) throw new Error('Rodada no disponible');
+    const updated = await saveActivity({ ...activity, ...details }, await tracking.getRoute());
+    await tracking.reset();
+    setActivities(updated);
+    setEditingRide(false);
     router.push({ pathname: '/activity/[id]', params: { id: String(activity.startedAt) } });
   }
 
@@ -66,64 +67,86 @@ export default function HomeScreen() {
     if (!activity && canStart) void tracking.start();
   }
 
-  if (activity && !showActivities) {
+  if (activity && !showProfile) {
     return (
-      <LiveRideMap
-        key={activity.startedAt}
-        startedAt={activity.startedAt}
-        running={running}
-        locationMessage={locationMessage}
-        header={(
-          <View style={styles.rideHeader}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Abrir historial de actividades"
-              onPress={() => router.setParams({ section: 'actividades' })}
-              style={({ pressed }) => [styles.historyButton, pressed && styles.pressed]}
-            >
-              <History size={22} color={colors.textPrimary} />
-            </Pressable>
-            <Text accessibilityRole="header" style={styles.rideTitle}>
-              {running ? 'Rodada en curso' : 'Rodada pausada'}
-            </Text>
-          </View>
-        )}
-      >
-        {route => (
-          <>
-            <RideDataPanel
-              route={route}
-              elapsedMs={elapsedMs}
-              distanceM={activity.distanceM}
-              elevationGainM={activity.elevationGainM ?? null}
-              currentSpeedKmh={currentSpeedKmh}
-              running={running}
-            />
-            {tracking.error && (
-              <Text accessibilityRole="alert" style={styles.rideError}>{tracking.error}</Text>
-            )}
-            {saveError && !running && (
-              <Text accessibilityRole="alert" style={styles.rideError}>
-                No pudimos guardar la rodada. Puedes intentarlo de nuevo.
+      <>
+        <LiveRideMap
+          key={activity.startedAt}
+          startedAt={activity.startedAt}
+          running={running}
+          segment={tracking.segment}
+          lastFixAt={tracking.lastFixAt}
+          locationMessage={locationMessage}
+          header={(
+            <View style={styles.rideHeader}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Abrir actividades en Tú"
+                onPress={() => router.setParams({ section: 'tu', perfil: 'actividades' })}
+                style={({ pressed }) => [styles.historyButton, pressed && styles.pressed]}
+              >
+                <History size={22} color={colors.textPrimary} />
+              </Pressable>
+              <Text accessibilityRole="header" style={styles.rideTitle}>
+                {running ? 'Rodada en curso' : 'Rodada pausada'}
               </Text>
-            )}
-            {running ? (
-              <AppButton label="Pausar" icon={Pause} onPress={tracking.pause} loading={busy} />
-            ) : (
-              <>
-                <AppButton label="Reanudar" icon={Play} onPress={tracking.resume} disabled={saving} loading={busy} />
-                <AppButton label="Guardar rodada" variant="secondary" onPress={save} loading={saving} disabled={busy} />
-              </>
-            )}
-          </>
-        )}
-      </LiveRideMap>
+            </View>
+          )}
+        >
+          {route => (
+            <>
+              <RideDataPanel
+                route={route}
+                elapsedMs={elapsedMs}
+                distanceM={activity.distanceM}
+                elevationGainM={activity.elevationGainM ?? null}
+                currentSpeedKmh={currentSpeedKmh}
+                running={running}
+              />
+              {tracking.error && (
+                <Text accessibilityRole="alert" style={styles.rideError}>{tracking.error}</Text>
+              )}
+              {running ? (
+                <AppButton label="Pausar" icon={Pause} onPress={tracking.pause} loading={busy} />
+              ) : (
+                <>
+                  <AppButton label="Reanudar" icon={Play} onPress={tracking.resume} loading={busy} />
+                  <AppButton label="Guardar rodada" variant="secondary" onPress={() => setEditingRide(true)} disabled={busy} />
+                </>
+              )}
+            </>
+          )}
+        </LiveRideMap>
+        {editingRide && <RideEditor onCancel={() => setEditingRide(false)} onSave={save} />}
+      </>
     );
   }
 
   return (
     <SafeAreaView style={styles.screen}>
-      {!showActivities ? (
+      {showProfile && (
+        <View style={[styles.content, styles.profileHeader]}>
+          <Text accessibilityRole="header" style={styles.title}>Tú</Text>
+          <View style={styles.profileTabs}>
+            {[
+              { label: 'Progreso', key: 'progreso', icon: ChartNoAxesCombined, selected: !showActivities },
+              { label: 'Actividades', key: 'actividades', icon: History, selected: showActivities },
+            ].map(({ label, key, icon: Icon, selected }) => (
+              <Pressable
+                key={key}
+                accessibilityRole="tab"
+                accessibilityState={{ selected }}
+                onPress={() => router.setParams({ section: 'tu', perfil: key })}
+                style={[styles.profileTab, selected && styles.profileSelected]}
+              >
+                <Icon size={20} color={selected ? colors.primary : colors.textSecondary} />
+                <Text style={[styles.tabLabel, selected && styles.selectedLabel]}>{label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      )}
+      {!showProfile ? (
         <ScrollView style={styles.page} contentContainerStyle={styles.content}>
           <View style={styles.header}>
             <Text style={styles.brand}>TRAZA</Text>
@@ -148,37 +171,40 @@ export default function HomeScreen() {
                   <RideBasemap route={emptyRoute} />
                 </View>
                 <Text style={styles.body}>Toca + para comenzar una rodada. Activa la ubicación en segundo plano para registrar con la pantalla bloqueada.</Text>
+                <AppButton
+                  icon={Download}
+                  label={isUpdatePending ? 'Actualización lista' : isUpdateAvailable ? 'Actualización disponible' : 'Actualizaciones'}
+                  variant="secondary"
+                  onPress={() => router.push('/actualizaciones')}
+                />
               </>
             )}
           </View>
         </ScrollView>
+      ) : loadError ? (
+        <ErrorState
+          title="No pudimos abrir el historial"
+          message="Intenta cargar de nuevo las actividades guardadas en este dispositivo."
+          onRetry={() => {
+            setLoadError(false);
+            setLoadAttempt(attempt => attempt + 1);
+          }}
+        />
+      ) : activities === null ? (
+        <LoadingState message="Cargando actividades…" />
+      ) : !showActivities ? (
+        <ProgressPanel activities={activities} />
       ) : (
         <FlatList
           style={styles.page}
-          data={activities ?? undefined}
+          data={activities}
           keyExtractor={item => String(item.startedAt)}
           contentContainerStyle={styles.content}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
-          ListHeaderComponent={
-            <Text accessibilityRole="header" style={[styles.title, styles.historyTitle]}>Actividades</Text>
-          }
           ListEmptyComponent={
-            loadError ? (
-              <ErrorState
-                title="No pudimos abrir el historial"
-                message="Intenta cargar de nuevo las actividades guardadas en este dispositivo."
-                onRetry={() => {
-                  setLoadError(false);
-                  setLoadAttempt(attempt => attempt + 1);
-                }}
-              />
-            ) : activities === null ? (
-              <LoadingState message="Cargando actividades…" />
-            ) : (
-              <AppCard>
-                <EmptyState icon={History} title="Aún no hay actividades" message="Tus sesiones guardadas aparecerán aquí." />
-              </AppCard>
-            )
+            <AppCard>
+              <EmptyState icon={History} title="Aún no hay actividades" message="Tus sesiones guardadas aparecerán aquí." />
+            </AppCard>
           }
           renderItem={({ item }) => {
             const mean = averageSpeed(item.distanceM, item.durationMs);
@@ -187,7 +213,8 @@ export default function HomeScreen() {
                 <Pressable style={({ pressed }) => pressed && styles.pressed}>
                   <AppCard style={styles.historyCard}>
                     <View style={styles.historyMetrics}>
-                      <Text style={styles.date}>{activityDateFormat.format(item.startedAt)}</Text>
+                      <Text style={styles.activityName}>{item.name || 'Rodada'}</Text>
+                      <Text style={styles.body}>{activityDateFormat.format(item.startedAt)}{item.effort && ` · ${rideEffortLabels[item.effort]}`}</Text>
                       <Text style={styles.body}>
                         {formatDuration(item.durationMs)} · {item.distanceM === null ? 'Sin distancia GPS' : formatDistance(item.distanceM) + ' km'}
                       </Text>
@@ -204,12 +231,12 @@ export default function HomeScreen() {
       <View style={styles.navigation}>
         <Pressable
           accessibilityRole="tab"
-          accessibilityState={{ selected: !showActivities }}
+          accessibilityState={{ selected: !showProfile }}
           onPress={() => router.setParams({ section: 'mapas' })}
-          style={[styles.tab, !showActivities && styles.selected]}
+          style={[styles.tab, !showProfile && styles.selected]}
         >
-          <Map size={20} color={showActivities ? colors.textSecondary : colors.primary} />
-          <Text style={[styles.tabLabel, !showActivities && styles.selectedLabel]}>Mapas</Text>
+          <Map size={20} color={showProfile ? colors.textSecondary : colors.primary} />
+          <Text style={[styles.tabLabel, !showProfile && styles.selectedLabel]}>Mapas</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -226,12 +253,12 @@ export default function HomeScreen() {
         </Pressable>
         <Pressable
           accessibilityRole="tab"
-          accessibilityState={{ selected: showActivities }}
-          onPress={() => router.setParams({ section: 'actividades' })}
-          style={[styles.tab, showActivities && styles.selected]}
+          accessibilityState={{ selected: showProfile }}
+          onPress={() => router.setParams({ section: 'tu' })}
+          style={[styles.tab, showProfile && styles.selected]}
         >
-          <History size={20} color={showActivities ? colors.primary : colors.textSecondary} />
-          <Text style={[styles.tabLabel, showActivities && styles.selectedLabel]}>Actividades</Text>
+          <User size={20} color={showProfile ? colors.primary : colors.textSecondary} />
+          <Text style={[styles.tabLabel, showProfile && styles.selectedLabel]}>Tú</Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -272,8 +299,14 @@ const styles = StyleSheet.create({
   title: { ...typography.title, color: colors.textPrimary },
   body: { ...typography.body, color: colors.textSecondary },
   error: { ...typography.bodySmall, color: colors.error },
-  historyTitle: { marginBottom: spacing.md },
-  date: { ...typography.label, color: colors.textPrimary },
+  profileHeader: { paddingBottom: spacing.xs, gap: spacing.sm },
+  profileTabs: { flexDirection: 'row', borderBottomWidth: 1, borderColor: colors.border },
+  profileTab: {
+    flex: 1, minHeight: 54, alignItems: 'center', justifyContent: 'center',
+    gap: spacing.xxs, borderBottomWidth: 2, borderColor: 'transparent',
+  },
+  profileSelected: { borderColor: colors.primary },
+  activityName: { ...typography.subtitle, color: colors.textPrimary },
   historyCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   historyMetrics: { flex: 1 },
   pressed: { opacity: 0.7 },

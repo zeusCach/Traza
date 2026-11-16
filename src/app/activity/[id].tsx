@@ -1,13 +1,15 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Gauge, Mountain, Route, Timer } from 'lucide-react-native';
+import { ArrowLeft, Gauge, Mountain, Pencil, Route, Timer } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton, AppCard, EmptyState, ErrorState, LoadingState, MetricCard } from '@/components';
-import { type Activity, type ActivityRoute, loadActivities, loadActivityRoute } from '@/database/activities';
+import { type Activity, type ActivityRoute, type RideDetails, loadActivities, loadActivityRoute, rideEffortLabels, updateRideDetails } from '@/database/activities';
 import { ActivityRouteMap } from '@/features/activities/components/ActivityRouteMap';
 import { ElevationProfile } from '@/features/activities/components/ElevationProfile';
+import { RideEditor } from '@/features/activities/components/RideEditor';
+import { RideShareCard } from '@/features/activities/components/RideShareCard';
 import { activityDateFormat, averageSpeed, formatDistance, formatDuration, formatElevationGain, formatSpeed } from '@/features/activities/format';
 import { colors, spacing, typography } from '@/theme';
 
@@ -31,7 +33,6 @@ export default function ActivityScreen() {
             onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
           />
         </View>
-        <Text accessibilityRole="header" style={styles.title}>Resumen de rodada</Text>
         {Number.isSafeInteger(startedAt) ? (
           <ActivitySummary key={startedAt} startedAt={startedAt} />
         ) : (
@@ -45,6 +46,7 @@ export default function ActivityScreen() {
 function ActivitySummary({ startedAt }: { startedAt: number }) {
   const [attempt, setAttempt] = useState(0);
   const [summary, setSummary] = useState<SummaryState>({ status: 'loading' });
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -85,9 +87,20 @@ function ActivitySummary({ startedAt }: { startedAt: number }) {
   }
 
   const { activity, route } = summary;
+
+  async function saveDetails(details: RideDetails) {
+    const updated = await updateRideDetails(startedAt, details);
+    setSummary({ status: 'ready', activity: updated, route });
+    setEditing(false);
+  }
+
   return (
     <>
+      <Text accessibilityRole="header" style={styles.title}>{activity.name || 'Resumen de rodada'}</Text>
       <Text style={styles.date}>{activityDateFormat.format(activity.startedAt)}</Text>
+      {activity.effort && <Text style={styles.heading}>Esfuerzo: {rideEffortLabels[activity.effort]}</Text>}
+      <AppButton icon={Pencil} label="Editar rodada" variant="secondary" size="md" onPress={() => setEditing(true)} />
+      {editing && <RideEditor initial={activity} onCancel={() => setEditing(false)} onSave={saveDetails} />}
       <View style={styles.metrics}>
         <MetricCard label="Tiempo activo" value={formatDuration(activity.durationMs)} icon={Timer} />
         <MetricCard label="Distancia" value={formatDistance(activity.distanceM)} unit="km" highlighted />
@@ -114,6 +127,7 @@ function ActivitySummary({ startedAt }: { startedAt: number }) {
         )}
       </AppCard>
       {route?.some(segment => segment.some(point => point.altitudeM != null)) && <ElevationProfile route={route} />}
+      {route?.some(segment => segment.length > 0) && <RideShareCard activity={activity} route={route} />}
     </>
   );
 }

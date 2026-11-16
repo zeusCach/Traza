@@ -12,12 +12,14 @@ import { RideBasemap } from './RideBasemap';
 interface LiveRideMapProps {
   startedAt: number;
   running: boolean;
+  segment: number;
+  lastFixAt: number | null;
   locationMessage: string | null;
   header: ReactNode;
   children: (route: ActivityRoute) => ReactNode;
 }
 
-export function LiveRideMap({ startedAt, running, locationMessage, header, children }: LiveRideMapProps) {
+export function LiveRideMap({ startedAt, running, segment, lastFixAt, locationMessage, header, children }: LiveRideMapProps) {
   const [route, setRoute] = useState<ActivityRoute>([]);
   const [loadError, setLoadError] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -28,27 +30,24 @@ export function LiveRideMap({ startedAt, running, locationMessage, header, child
 
   useEffect(() => {
     let active = true;
-    let pending = false;
-
     async function refresh() {
-      if (pending) return;
-      pending = true;
       try {
         const previous = cursor.current;
-        const points = await loadDraftRoutePoints(startedAt, previous);
+        const through = running ? { segment, timestamp: lastFixAt ?? 0 } : undefined;
+        const points = await loadDraftRoutePoints(startedAt, previous, through);
         if (!active) return;
         setLoadError(false);
         if (!points.length) return;
         cursor.current = points[points.length - 1];
         setRoute(current => {
           const updated = [...current];
-          let segment = previous?.segment;
+          let tailSegment = previous?.segment;
           let tail = [...(updated.pop() ?? [])];
           for (const { segment: nextSegment, ...point } of points) {
-            if (segment !== nextSegment) {
+            if (tailSegment !== nextSegment) {
               if (tail.length) updated.push(tail);
               tail = [];
-              segment = nextSegment;
+              tailSegment = nextSegment;
             }
             tail.push(point);
           }
@@ -57,18 +56,14 @@ export function LiveRideMap({ startedAt, running, locationMessage, header, child
         });
       } catch {
         if (active) setLoadError(true);
-      } finally {
-        pending = false;
       }
     }
 
     void refresh();
-    const interval = running ? setInterval(() => void refresh(), 1_000) : undefined;
     return () => {
       active = false;
-      clearInterval(interval);
     };
-  }, [attempt, running, startedAt]);
+  }, [attempt, lastFixAt, running, segment, startedAt]);
 
   const status = loadError ? 'No pudimos cargar el recorrido' : locationMessage ??
     (!route.length ? (running ? 'Buscando señal GPS…' : 'Sin puntos GPS registrados') : null);
