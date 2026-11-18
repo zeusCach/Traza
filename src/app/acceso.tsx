@@ -17,18 +17,24 @@ export default function AccessScreen() {
 function AccessForm({ initialRegister }: { initialRegister: boolean }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [register, setRegister] = useState(initialRegister);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const canSubmit = !!email.trim() && !!password && (!register || (!!firstName.trim() && !!lastName.trim()));
 
   async function submit() {
-    if (!supabase || busy || !email.trim() || !password) return;
+    if (!supabase || busy || !canSubmit) return;
     setBusy(true);
     setMessage('');
     try {
       const credentials = { email: email.trim(), password };
       const { data, error } = register
-        ? await supabase.auth.signUp(credentials)
+        ? await supabase.auth.signUp({
+          ...credentials,
+          options: { data: { first_name: firstName.trim(), last_name: lastName.trim() } },
+        })
         : await supabase.auth.signInWithPassword(credentials);
 
       if (error) throw error;
@@ -62,6 +68,16 @@ function AccessForm({ initialRegister }: { initialRegister: boolean }) {
           <Text accessibilityRole="header" style={styles.title}>
             {register ? 'Crea tu cuenta' : 'Inicia sesión'}
           </Text>
+          {register && (
+            <>
+              <Text style={styles.label}>Nombre</Text>
+              <TextInput accessibilityLabel="Nombre" autoComplete="given-name" autoCapitalize="words"
+                value={firstName} onChangeText={setFirstName} maxLength={80} editable={!busy} style={styles.input} />
+              <Text style={styles.label}>Apellido</Text>
+              <TextInput accessibilityLabel="Apellido" autoComplete="family-name" autoCapitalize="words"
+                value={lastName} onChangeText={setLastName} maxLength={80} editable={!busy} style={styles.input} />
+            </>
+          )}
           <Text style={styles.label}>Correo electrónico</Text>
           <TextInput
             accessibilityLabel="Correo electrónico"
@@ -88,7 +104,7 @@ function AccessForm({ initialRegister }: { initialRegister: boolean }) {
           <AppButton
             label={register ? 'Crear cuenta' : 'Iniciar sesión'}
             loading={busy}
-            disabled={!supabase || !email.trim() || !password}
+            disabled={!supabase || !canSubmit}
             onPress={() => void submit()}
           />
           <AppButton
