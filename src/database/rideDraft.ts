@@ -25,11 +25,27 @@ let database: Promise<SQLiteDatabase> | undefined;
 let pendingWrite = Promise.resolve();
 const stationaryDelayMs = 8_000;
 const maxFixGapMs = 5_000;
+const maxRouteGapMs = 30_000;
+const maxHorizontalAccuracyM = 25;
 const motionSpeedKmh = 1.8;
+
+async function retryLocked<T>(operation: () => Promise<T>): Promise<T> {
+  for (const delay of [50, 150, 400]) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!(error instanceof Error) || !/SQLITE_(BUSY|LOCKED)|database (?:table |schema )?is locked/i.test(error.message)) {
+        throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  return operation();
+}
 
 function openDraftDatabase() {
   database ??= openDatabaseAsync('traza-ride-draft.db').then(async db => {
-    await db.execAsync(`
+    await retryLocked(() => db.execAsync(`
       PRAGMA journal_mode = WAL;
       CREATE TABLE IF NOT EXISTS draft (
         id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -50,8 +66,8 @@ function openDraftDatabase() {
         longitude REAL NOT NULL,
         PRIMARY KEY (segment, timestamp)
       );
-    `);
-    await db.withTransactionAsync(async () => {
+    `));
+    await retryLocked(() => db.withTransactionAsync(async () => {
       const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
       const schemaVersion = version?.user_version ?? 0;
       if (schemaVersion < 1) {
@@ -74,7 +90,7 @@ function openDraftDatabase() {
       if (schemaVersion < 4) {
         await db.execAsync('ALTER TABLE draft ADD COLUMN guidePostId TEXT; PRAGMA user_version = 4;');
       }
-    });
+    }));
     return db;
   }).catch(error => {
     database = undefined;
@@ -87,9 +103,9 @@ function write<T>(operation: (db: SQLiteDatabase) => Promise<T>): Promise<T> {
   const result = pendingWrite.then(async () => {
     const db = await openDraftDatabase();
     const response: { value?: T } = {};
-    await db.withExclusiveTransactionAsync(async transaction => {
+    await retryLocked(() => db.withExclusiveTransactionAsync(async transaction => {
       response.value = await operation(transaction);
-    });
+    }));
     return response.value as T;
   });
   pendingWrite = result.then(() => undefined, () => undefined);
@@ -211,7 +227,8 @@ export function appendRideLocations(locations: LocationObject[], source: 'backgr
       if (!Number.isFinite(timestamp) || timestamp < draft.segmentStart) continue;
       draft.checkpointAt = Math.max(draft.checkpointAt, timestamp);
       if (timestamp <= (draft.lastFixAt ?? -Infinity) ||
-        coords.accuracy === null || !Number.isFinite(coords.accuracy) || coords.accuracy > 25 ||
+        coords.accuracy === null || !Number.isFinite(coords.accuracy) ||
+        coords.accuracy <= 0 || coords.accuracy > maxHorizontalAccuracyM ||
         !(Math.abs(coords.latitude) <= 90) || !(Math.abs(coords.longitude) <= 180)) {
         continue;
       }
@@ -229,8 +246,9 @@ export function appendRideLocations(locations: LocationObject[], source: 'backgr
 
       if (moving) {
         draft.stationarySince = null;
-        if (draft.activeSince === null) {
-          draft.activeSince = timestamp;
+        const resuming = draft.activeSince === null;
+        if (resuming) draft.activeSince = timestamp;
+        if (resuming || (previous && timestamp - previous.timestamp > maxRouteGapMs)) {
           draft.segment += 1;
           draft.lastAltitudeM = null;
           previous = null;

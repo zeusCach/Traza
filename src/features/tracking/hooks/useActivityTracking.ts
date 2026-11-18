@@ -19,6 +19,7 @@ import {
 
 import {
   backgroundLocationAvailable,
+  isBackgroundLocationRegistered,
   rideLocationOptions,
   startBackgroundLocation,
   stopBackgroundLocation,
@@ -26,6 +27,8 @@ import {
 
 const speedMaxAgeMs = 5_000;
 const checkpointIntervalMs = 5_000;
+const gpsStaleMs = 15_000;
+const recoveryWindowMs = 30_000;
 
 async function checkLocationServices() {
   if (await Location.hasServicesEnabledAsync()) return true;
@@ -40,25 +43,30 @@ async function checkLocationServices() {
   return false;
 }
 
-async function recordingMode(): Promise<RecordingMode> {
+async function getRecordingPermission(): Promise<{ mode: RecordingMode; approximate: boolean }> {
+  let approximate = false;
   try {
-    if (!(await Location.requestForegroundPermissionsAsync()).granted) return 'timer';
+    const permission = await Location.requestForegroundPermissionsAsync();
+    if (!permission.granted) return { mode: 'timer', approximate };
+    approximate = permission.android?.accuracy === 'coarse' || permission.ios?.accuracy === 'reduced';
   } catch {
-    return 'timer';
+    return { mode: 'timer', approximate };
   }
 
   try {
     if (await backgroundLocationAvailable()) {
+      // A user-started Android service records under the foreground location grant.
+      if (Platform.OS === 'android') return { mode: 'background', approximate };
       const permission = await Location.getBackgroundPermissionsAsync();
       if (permission.granted || (permission.canAskAgain &&
         (await Location.requestBackgroundPermissionsAsync()).granted)) {
-        return 'background';
+        return { mode: 'background', approximate };
       }
     }
   } catch {
     // The foreground watcher can still record when background access is unavailable.
   }
-  return 'foreground';
+  return { mode: 'foreground', approximate };
 }
 
 export function useActivityTracking() {
@@ -69,6 +77,7 @@ export function useActivityTracking() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locationFailed, setLocationFailed] = useState(false);
+  const [approximate, setApproximate] = useState(false);
   const [recovered, setRecovered] = useState(false);
   const changing = useRef(false);
   const revision = useRef(0);
@@ -86,17 +95,28 @@ export function useActivityTracking() {
         if (finished) {
           await clearRideDraft();
           restored = null;
-        } else if (stored?.segmentStart != null) {
-          restored = await pauseRideDraft();
         }
         try {
-          await stopBackgroundLocation();
+          if (restored?.segmentStart != null) {
+            const registered = restored.mode === 'background' && await isBackgroundLocationRegistered();
+            // The task may have saved more fixes while the app was opening.
+            if (registered) restored = await loadRideDraft();
+            const receivingFixes = registered && restored?.lastFixAt != null &&
+              Date.now() - restored.lastFixAt <= recoveryWindowMs;
+            if (!receivingFixes) {
+              restored = await pauseRideDraft();
+              await stopBackgroundLocation();
+            }
+          } else {
+            await stopBackgroundLocation();
+          }
         } catch {
+          restored = await pauseRideDraft();
           if (active) setError('No pudimos detener el servicio de ubicación. Intenta reanudar o guardar la rodada.');
         }
         if (active) {
           setDraft(restored);
-          setRecovered(restored !== null);
+          setRecovered(restored !== null && restored.segmentStart === null);
           setReady(true);
         }
       } catch {
@@ -131,13 +151,15 @@ export function useActivityTracking() {
     if (!ready || draft?.segmentStart != null || (guidePostId && draft)) return;
     return runCommand(async () => {
       if (!(await checkLocationServices())) return;
-      const mode = await recordingMode();
+      const permission = await getRecordingPermission();
+      const { mode } = permission;
       // The permission flow can take the user to system settings.
       if (!(await checkLocationServices())) return;
       await stopBackgroundLocation();
       const startTime = Date.now();
       let started = await beginRideSegment(mode, startTime, guidePostId);
       setLocationFailed(false);
+      setApproximate(permission.approximate);
       setRecovered(false);
       if (mode === 'background') {
         try {
@@ -252,8 +274,12 @@ export function useActivityTracking() {
       locationMessage = 'Se perdió la ubicación. El cronómetro sigue activo.';
     } else if (mode === 'foreground') {
       locationMessage = 'Mantén la app abierta. El permiso para registrar con la pantalla bloqueada no está disponible.';
+    } else if (approximate) {
+      locationMessage = 'La ubicación es aproximada. Activa la ubicación precisa para registrar el recorrido.';
     } else if (draft.lastFixAt === null) {
       locationMessage = 'Buscando señal GPS…';
+    } else if (now - draft.lastFixAt > gpsStaleMs) {
+      locationMessage = 'Señal GPS débil. Esperando una ubicación más precisa.';
     }
   }
 

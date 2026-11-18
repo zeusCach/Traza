@@ -7,7 +7,7 @@ import { appendRideLocations } from '@/database/rideDraft';
 const taskName = 'traza.ride-location.v1';
 
 export const rideLocationOptions: Location.LocationOptions = {
-  accuracy: Location.Accuracy.High,
+  accuracy: Location.Accuracy.BestForNavigation,
   distanceInterval: 0,
   timeInterval: 1_000,
 };
@@ -30,13 +30,17 @@ export function startBackgroundLocation() {
     foregroundService: {
       notificationTitle: 'TRAZA · Rodada en curso',
       notificationBody: 'Registrando el recorrido mientras la pantalla está bloqueada.',
-      killServiceOnDestroy: true,
+      killServiceOnDestroy: false,
     },
   });
 }
 
+export async function isBackgroundLocationRegistered() {
+  return (await backgroundLocationAvailable()) && await Location.hasStartedLocationUpdatesAsync(taskName);
+}
+
 export async function stopBackgroundLocation() {
-  if (await backgroundLocationAvailable() && await Location.hasStartedLocationUpdatesAsync(taskName)) {
+  if (await isBackgroundLocationRegistered()) {
     await Location.stopLocationUpdatesAsync(taskName);
   }
 }
