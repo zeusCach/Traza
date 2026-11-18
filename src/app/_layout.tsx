@@ -7,6 +7,7 @@ import { useCallback, useState } from 'react';
 import { View } from 'react-native';
 
 import { ErrorState } from '@/components';
+import { ProfilePhotoProvider } from '@/features/account/ProfilePhotoProvider';
 import { SessionProvider, useSession } from '@/features/auth/SessionProvider';
 import { StartupLoader } from '@/features/auth/StartupLoader';
 import { ThemeProvider, trazaFonts, useTheme } from '@/theme';
@@ -15,7 +16,9 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <SessionProvider>
-        <AppNavigator />
+        <ProfilePhotoProvider>
+          <AppNavigator />
+        </ProfilePhotoProvider>
       </SessionProvider>
     </ThemeProvider>
   );

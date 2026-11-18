@@ -9,6 +9,7 @@ import { useSession } from '@/features/auth/SessionProvider';
 import { radius, spacing, themedStyles, typography, useTheme } from '@/theme';
 
 import { profileIdentity } from './profileIdentity';
+import { useProfilePhoto } from './ProfilePhotoProvider';
 
 const sections: { label: string; icon: LucideIcon; href: Href; destructive?: boolean }[] = [
   { label: 'Cuenta', icon: User, href: '/cuenta' },
@@ -25,15 +26,16 @@ export function ProfileMenu() {
   const { colors } = useTheme();
   const styles = useStyles();
   const [open, setOpen] = useState(false);
+  const profile = session ? profileIdentity(session.user) : undefined;
+  const { currentImage } = useProfilePhoto(profile?.imageUri);
   const closeMenu = () => setOpen(false);
-  if (!session) return null;
-  const profile = profileIdentity(session.user);
+  if (!profile) return null;
 
   return (
     <>
       <Pressable accessibilityRole="button" accessibilityLabel="Abrir menú de perfil"
         accessibilityState={{ expanded: open }} style={styles.iconButton} onPress={() => setOpen(true)}>
-        <UserAvatar {...profile} />
+        <UserAvatar name={profile.name} imageUri={currentImage} />
       </Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={closeMenu}>
         <View style={styles.overlay} accessibilityViewIsModal>
@@ -45,7 +47,7 @@ export function ProfileMenu() {
                 <X size={24} color={colors.textPrimary} />
               </Pressable>
               <View style={styles.identity}>
-                <UserAvatar {...profile} size="lg" />
+                <UserAvatar name={profile.name} imageUri={currentImage} size="lg" />
                 <Text style={styles.name}>{profile.name}</Text>
               </View>
               {sections.map(({ label, icon: Icon, href, destructive }) => (

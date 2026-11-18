@@ -7,7 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton, LoadingState } from '@/components';
 import { supabase } from '@/database/supabase';
-import { metadataText } from '@/features/account/profileIdentity';
+import { metadataText, profileIdentity } from '@/features/account/profileIdentity';
+import { ProfilePhotoEditor } from '@/features/account/ProfilePhotoEditor';
 import { useSession } from '@/features/auth/SessionProvider';
 import { radius, spacing, typography, themedStyles } from '@/theme';
 
@@ -98,7 +99,6 @@ function AccountSettings({ user, section }: { user: User; section: 'cuenta' | 'e
   const [busy, setBusy] = useState<Action>();
   const [status, setStatus] = useState<{ action: Action; text: string }>();
 
-  const fullName = [metadataText(user, 'first_name'), metadataText(user, 'last_name')].filter(Boolean).join(' ');
 
   useEffect(() => {
     if (!supabase || section !== 'cuenta') return;
@@ -240,7 +240,7 @@ function AccountSettings({ user, section }: { user: User; section: 'cuenta' | 'e
     <>
       <View style={styles.section}>
         <Text accessibilityRole="header" style={styles.heading}>Perfil</Text>
-        {!!fullName && <Text style={styles.text}>{fullName}</Text>}
+        <ProfilePhotoEditor {...profileIdentity(user)} />
         {profileError ? (
           <>
             <Text style={styles.text}>No pudimos cargar tu nombre de usuario.</Text>
