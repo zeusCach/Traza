@@ -10,9 +10,6 @@ import { colors, radius, spacing, typography } from '@/theme';
 
 export default function AccountScreen() {
   const session = useSession();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [register, setRegister] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const accountId = session?.user.id;
@@ -50,35 +47,15 @@ export default function AccountScreen() {
     else router.replace('/');
   }
 
-  async function submit() {
+  async function signOut() {
     if (!supabase || busy) return;
     setBusy(true);
     setMessage('');
     try {
-      if (session) {
-        const { error } = await supabase.auth.signOut({ scope: 'local' });
-        if (error) throw error;
-        setPassword('');
-        return;
-      }
-
-      const credentials = { email: email.trim(), password };
-      const { data, error } = register
-        ? await supabase.auth.signUp(credentials)
-        : await supabase.auth.signInWithPassword(credentials);
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
       if (error) throw error;
-      setPassword('');
-      if (data.session) close();
-      else {
-        setRegister(false);
-        setMessage('Revisa tu correo para confirmar tu cuenta y después inicia sesión.');
-      }
-    } catch (error) {
-      const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : null;
-      if (code === 'invalid_credentials') setMessage('Revisa tu correo y contraseña.');
-      else if (code === 'email_not_confirmed') setMessage('Confirma tu correo antes de iniciar sesión.');
-      else if (code === 'weak_password') setMessage('Elige una contraseña más segura.');
-      else setMessage('No pudimos completar la solicitud. Vuelve a intentarlo.');
+    } catch {
+      setMessage('No pudimos cerrar tu sesión. Vuelve a intentarlo.');
     } finally {
       setBusy(false);
     }
@@ -98,22 +75,9 @@ export default function AccountScreen() {
               maxLength={80} value={name ?? ''} onChangeText={value => setProfile({ accountId, name: value })}
               editable={!busy} style={styles.input} placeholderTextColor={colors.textSecondary} />
             <AppButton label="Guardar nombre" disabled={busy || !name?.trim()} onPress={() => void saveName()} />
-            <AppButton label="Cerrar sesión" variant="secondary" disabled={busy} onPress={() => void submit()} />
+            <AppButton label="Cerrar sesión" variant="secondary" disabled={busy} onPress={() => void signOut()} />
           </>
-        ) : (
-          <>
-            <TextInput accessibilityLabel="Correo electrónico" placeholder="Correo electrónico" autoCapitalize="none"
-              autoComplete="email" keyboardType="email-address" value={email} onChangeText={setEmail}
-              style={styles.input} placeholderTextColor={colors.textSecondary} />
-            <TextInput accessibilityLabel="Contraseña" placeholder="Contraseña" secureTextEntry
-              autoComplete={register ? 'new-password' : 'current-password'} value={password} onChangeText={setPassword}
-              style={styles.input} placeholderTextColor={colors.textSecondary} />
-            <AppButton label={register ? 'Crear cuenta' : 'Iniciar sesión'} loading={busy}
-              disabled={!email.trim() || !password} onPress={() => void submit()} />
-            <AppButton label={register ? 'Ya tengo cuenta' : 'Crear una cuenta'} variant="ghost" disabled={busy}
-              onPress={() => { setRegister(!register); setMessage(''); }} />
-          </>
-        )}
+        ) : null}
         {!!message && <Text accessibilityLiveRegion="polite" style={styles.text}>{message}</Text>}
       </ScrollView>
     </SafeAreaView>
