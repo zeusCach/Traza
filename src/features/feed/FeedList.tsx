@@ -1,17 +1,25 @@
 import { Link } from 'expo-router';
 import { Bookmark, ChevronRight, Heart } from 'lucide-react-native';
+import { useCallback, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppCard, EmptyState, ErrorState, LoadingState, UserAvatar } from '@/components';
-import { ActivityRouteMap } from '@/features/activities/components/ActivityRouteMap';
+import { RouteMapPreview } from '@/features/activities/components/ActivityMapPreview';
 import { activityDateFormat, formatDistance, formatDuration } from '@/features/activities/format';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, spacing, typography } from '@/theme';
 
 import { examplePosts, togglePost, type FeedPost } from './feedStorage';
 import { useFeed } from './useFeed';
 
+const feedViewability = { itemVisiblePercentThreshold: 10, minimumViewTime: 120 };
+
 export function FeedList() {
   const { state, error, busy, change, retry } = useFeed();
+  const [visiblePosts, setVisiblePosts] = useState<Set<string>>(() => new Set());
+  const onPostsVisible = useCallback(({ viewableItems }: { viewableItems: { key: string }[] }) => {
+    setVisiblePosts(new Set(viewableItems.map(item => item.key)));
+  }, []);
+
   if (error) return <ErrorState title="No pudimos actualizar el feed" message="Intenta cargar los datos locales de nuevo." onRetry={retry} />;
   if (!state) return <LoadingState message="Cargando feed…" />;
 
@@ -19,11 +27,16 @@ export function FeedList() {
     <FlatList
       data={[...state.published, ...examplePosts]}
       keyExtractor={post => post.id}
+      viewabilityConfig={feedViewability}
+      onViewableItemsChanged={onPostsVisible}
+      extraData={visiblePosts}
+      initialNumToRender={4}
+      windowSize={5}
       contentContainerStyle={styles.content}
       ListHeaderComponent={(
         <View style={styles.header}>
           <Text accessibilityRole="header" style={styles.title}>Feed</Text>
-          <Text style={styles.caption}>Actividades de quienes sigues · Vista de ejemplo</Text>
+          <Text style={styles.caption}>Actividades de quienes sigues</Text>
         </View>
       )}
       renderItem={({ item: post }) => {
@@ -46,11 +59,7 @@ export function FeedList() {
                   {post.activity.distanceM !== null && `${formatDistance(post.activity.distanceM)} km · `}
                   {formatDuration(post.activity.durationMs)}
                 </Text>
-                {post.route.some(segment => segment.length > 0) && (
-                  <View pointerEvents="none" style={styles.preview}>
-                    <ActivityRouteMap route={post.route} fill />
-                  </View>
-                )}
+                <RouteMapPreview route={post.route} visible={visiblePosts.has(post.id)} />
               </Pressable>
             </Link>
             <View style={styles.actions}>
@@ -125,7 +134,6 @@ const styles = StyleSheet.create({
   card: { gap: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   info: { flex: 1 },
-  preview: { height: 148, borderRadius: radius.md, overflow: 'hidden' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', borderTopWidth: 1, borderColor: colors.border },
   action: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   active: { color: colors.primary },

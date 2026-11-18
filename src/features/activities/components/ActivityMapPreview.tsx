@@ -23,10 +23,18 @@ export const ActivityMapPreview = memo(function ActivityMapPreview({ startedAt, 
   }, [startedAt]);
 
   if (failed) return <Text style={styles.notice}>No se pudo abrir el recorrido.</Text>;
+
+  return <RouteMapPreview route={route} visible={visible} />;
+});
+
+export const RouteMapPreview = memo(function RouteMapPreview({ route, visible }: {
+  route: ActivityRoute | null;
+  visible: boolean;
+}) {
   if (route && !route.some(segment => segment.length > 0)) return null;
 
   return (
-    <View style={styles.frame}>
+    <View pointerEvents="none" style={styles.frame}>
       {route && visible && <RideBasemap route={route} variant="preview" />}
     </View>
   );
