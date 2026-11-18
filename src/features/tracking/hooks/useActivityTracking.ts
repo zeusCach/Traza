@@ -127,8 +127,8 @@ export function useActivityTracking() {
     }
   }, []);
 
-  function begin() {
-    if (!ready || draft?.segmentStart != null) return;
+  function begin(guidePostId?: string) {
+    if (!ready || draft?.segmentStart != null || (guidePostId && draft)) return;
     return runCommand(async () => {
       if (!(await checkLocationServices())) return;
       const mode = await recordingMode();
@@ -136,7 +136,7 @@ export function useActivityTracking() {
       if (!(await checkLocationServices())) return;
       await stopBackgroundLocation();
       const startTime = Date.now();
-      let started = await beginRideSegment(mode, startTime);
+      let started = await beginRideSegment(mode, startTime, guidePostId);
       setLocationFailed(false);
       setRecovered(false);
       if (mode === 'background') {
@@ -267,6 +267,7 @@ export function useActivityTracking() {
     running,
     autoPaused,
     segment: draft?.segment ?? 0,
+    guidePostId: draft?.guidePostId ?? null,
     lastFixAt: draft?.lastFixAt ?? null,
     elapsedMs: draft ? rideElapsedMs(draft, now) : 0,
     currentSpeedKmh: running && !autoPaused && !locationFailed && draft?.lastFixAt != null && now - draft.lastFixAt < speedMaxAgeMs
@@ -283,7 +284,7 @@ export function useActivityTracking() {
     getRoute: loadDraftRoute,
     start: begin,
     pause,
-    resume: begin,
+    resume: () => begin(),
     reset,
   };
 }

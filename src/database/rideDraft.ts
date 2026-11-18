@@ -18,6 +18,7 @@ export interface RideDraft extends Activity {
   speedKmh: number | null;
   elevationGainM: number | null;
   lastAltitudeM: number | null;
+  guidePostId: string | null;
 }
 
 let database: Promise<SQLiteDatabase> | undefined;
@@ -70,6 +71,9 @@ function openDraftDatabase() {
           PRAGMA user_version = 3;
         `);
       }
+      if (schemaVersion < 4) {
+        await db.execAsync('ALTER TABLE draft ADD COLUMN guidePostId TEXT; PRAGMA user_version = 4;');
+      }
     });
     return db;
   }).catch(error => {
@@ -100,19 +104,20 @@ export async function loadRideDraft() {
   return readDraft(await openDraftDatabase());
 }
 
-export function beginRideSegment(mode: RecordingMode, now: number) {
+export function beginRideSegment(mode: RecordingMode, now: number, guidePostId?: string) {
   return write(async db => {
     const draft = await readDraft(db);
+    if (guidePostId && draft) throw new Error('Ya hay una rodada pendiente');
     if (draft?.segmentStart != null) return draft;
     await db.runAsync(`
-      INSERT INTO draft (id, startedAt, durationMs, mode, segment, segmentStart, activeSince, checkpointAt)
-      VALUES (1, ?, 0, ?, 1, ?, ?, ?)
+      INSERT INTO draft (id, startedAt, durationMs, mode, segment, segmentStart, activeSince, checkpointAt, guidePostId)
+      VALUES (1, ?, 0, ?, 1, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         mode = excluded.mode, segment = draft.segment + 1,
         segmentStart = excluded.segmentStart, activeSince = excluded.activeSince, checkpointAt = excluded.checkpointAt,
         stationarySince = NULL,
         lastFixAt = NULL, speedKmh = NULL, lastAltitudeM = NULL
-    `, now, mode, now, now, now);
+    `, now, mode, now, now, now, guidePostId ?? null);
     return (await readDraft(db))!;
   });
 }

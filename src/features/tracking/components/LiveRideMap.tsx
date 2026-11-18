@@ -11,6 +11,7 @@ import { RideBasemap } from './RideBasemap';
 
 interface LiveRideMapProps {
   startedAt: number;
+  guideRoute?: ActivityRoute;
   running: boolean;
   segment: number;
   lastFixAt: number | null;
@@ -19,7 +20,7 @@ interface LiveRideMapProps {
   children: (route: ActivityRoute) => ReactNode;
 }
 
-export function LiveRideMap({ startedAt, running, segment, lastFixAt, locationMessage, header, children }: LiveRideMapProps) {
+export function LiveRideMap({ startedAt, guideRoute, running, segment, lastFixAt, locationMessage, header, children }: LiveRideMapProps) {
   const [route, setRoute] = useState<ActivityRoute>([]);
   const [loadError, setLoadError] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -70,7 +71,7 @@ export function LiveRideMap({ startedAt, running, segment, lastFixAt, locationMe
 
   return (
     <View style={styles.screen}>
-      <RideBasemap route={route} viewport={viewport} />
+      <RideBasemap route={route} guideRoute={guideRoute} viewport={viewport} />
       <SafeAreaView pointerEvents="box-none" style={styles.overlay}>
         <View pointerEvents="box-none" style={styles.top}>
           {header}

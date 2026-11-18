@@ -1,6 +1,6 @@
 import { Camera, type CameraRef, GeoJSONSource, type GeoJSONSourceProps, type InitialViewState, Layer, type LngLat, Map, RasterDEMSource } from '@maplibre/maplibre-react-native';
 import { LocateFixed, Maximize, Mountain, RefreshCw } from 'lucide-react-native';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { ActivityRoute, RoutePoint } from '@/database/activities';
@@ -40,10 +40,11 @@ function routeView(route: ActivityRoute): InitialViewState {
   return { bounds: [west, south, east, north], padding: { top: 24, right: 24, bottom: 24, left: 24 } };
 }
 
-export default memo(function NativeRideBasemap({ route, viewport, variant = 'live' }: RideBasemapProps) {
+export default memo(function NativeRideBasemap({ route, guideRoute, viewport, variant = 'live' }: RideBasemapProps) {
   const live = variant === 'live';
   const preview = variant === 'preview';
-  const view = useMemo(() => live ? initialView : routeView(route), [live, route]);
+  const guideView = useMemo(() => guideRoute ? routeView(guideRoute) : null, [guideRoute]);
+  const view = useMemo(() => live ? guideView ?? initialView : routeView(route), [guideView, live, route]);
   const camera = useRef<CameraRef>(null);
   const centered = useRef(false);
   const [ready, setReady] = useState(false);
@@ -52,6 +53,15 @@ export default memo(function NativeRideBasemap({ route, viewport, variant = 'liv
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const latest = live ? route.at(-1)?.at(-1) : undefined;
+  const guideData = useMemo<GeoJSONSourceProps['data']>(() => ({
+    type: 'FeatureCollection',
+    features: (guideRoute ?? []).filter(segment => segment.length > 1).map(segment => ({
+      type: 'Feature',
+      properties: {},
+      geometry: { type: 'LineString', coordinates: segment.map(coordinates) },
+    })),
+  }), [guideRoute]);
+  const guideStart = guideRoute?.find(segment => segment.length > 0)?.[0];
   const data = useMemo<GeoJSONSourceProps['data']>(() => ({
     type: 'FeatureCollection',
     features: route.filter(segment => segment.length > 0).map(segment => ({
@@ -91,19 +101,23 @@ export default memo(function NativeRideBasemap({ route, viewport, variant = 'liv
     }
   }
 
-  function fitRoute() {
+  const fitRoute = useCallback(() => {
     if ('bounds' in view && view.bounds) {
       camera.current?.fitBounds(view.bounds, { padding: view.padding, duration: 300 });
     } else if ('center' in view && view.center) {
       camera.current?.easeTo({ center: view.center, zoom: view.zoom, duration: 300 });
     }
-  }
+  }, [view]);
+
+  useEffect(() => {
+    if (ready && live && guideView && !latest) fitRoute();
+  }, [fitRoute, guideView, latest, live, ready]);
 
   if (failed) {
     if (preview) return <Text style={styles.previewNotice}>Mapa no disponible</Text>;
     return (
       <View style={viewport && styles.fullscreen}>
-        <ActivityRouteMap route={route} live={live} fill={!!viewport} />
+        <ActivityRouteMap route={route} guideRoute={guideRoute} live={live} fill={!!viewport} />
         <Pressable accessibilityRole="button" onPress={() => {
           centered.current = false;
           setAttempt(current => current + 1);
@@ -160,6 +174,21 @@ export default memo(function NativeRideBasemap({ route, viewport, variant = 'liv
             />
           </RasterDEMSource>
         )}
+        {guideRoute && (
+          <GeoJSONSource id="ride-guide" data={guideData}>
+            <Layer id="ride-guide-line" type="line"
+              layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+              paint={{ 'line-color': colors.routeGuide, 'line-width': 5, 'line-dasharray': [2, 2] }} />
+          </GeoJSONSource>
+        )}
+        {guideStart && (
+          <GeoJSONSource id="ride-guide-start" data={{
+            type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: coordinates(guideStart) },
+          }}>
+            <Layer id="ride-guide-start-marker" type="circle"
+              paint={{ 'circle-color': colors.background, 'circle-radius': 5, 'circle-stroke-color': colors.routeGuide, 'circle-stroke-width': 2 }} />
+          </GeoJSONSource>
+        )}
         <GeoJSONSource id="ride-track" data={data}>
           <Layer
             id="ride-track-outline"
@@ -212,8 +241,12 @@ export default memo(function NativeRideBasemap({ route, viewport, variant = 'liv
           style={[styles.button, !latest && styles.disabled]}
         >
           <LocateFixed size={22} color={following && latest ? colors.primary : colors.textPrimary} />
-        </Pressable> : (
-          <Pressable accessibilityRole="button" accessibilityLabel="Ver recorrido completo" onPress={fitRoute} style={styles.button}>
+        </Pressable> : null}
+        {(!live || guideRoute) && (
+          <Pressable accessibilityRole="button" accessibilityLabel={live ? 'Ver ruta guardada completa' : 'Ver recorrido completo'} onPress={() => {
+            if (live) setFollowing(false);
+            fitRoute();
+          }} style={styles.button}>
             <Maximize size={22} color={colors.textPrimary} />
           </Pressable>
         )}

@@ -1,34 +1,31 @@
 import { Link, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useUpdates } from 'expo-updates';
-import { ChartNoAxesCombined, ChevronRight, Download, History, Map, Newspaper, Pause, Play, Plus, User } from 'lucide-react-native';
+import { ChartNoAxesCombined, ChevronRight, History, Map, Newspaper, Pause, Play, Plus, User } from 'lucide-react-native';
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton, AppCard, EmptyState, ErrorState, LoadingState } from '@/components';
-import { type Activity, type ActivityRoute, type RideDetails, loadActivities, rideEffortLabels, saveActivity } from '@/database/activities';
+import { type Activity, type RideDetails, loadActivities, rideEffortLabels, saveActivity } from '@/database/activities';
 import { ActivityMapPreview } from '@/features/activities/components/ActivityMapPreview';
 import { ProgressPanel } from '@/features/activities/components/ProgressPanel';
 import { RideEditor } from '@/features/activities/components/RideEditor';
 import { activityDateFormat, averageSpeed, formatDistance, formatDuration, formatSpeed } from '@/features/activities/format';
 import { FeedList, SavedRoutes } from '@/features/feed/FeedList';
+import { examplePosts } from '@/features/feed/feedStorage';
+import { useFeed } from '@/features/feed/useFeed';
 import { LiveRideMap } from '@/features/tracking/components/LiveRideMap';
-import { RideBasemap } from '@/features/tracking/components/RideBasemap';
 import { RideDataPanel } from '@/features/tracking/components/RideDataPanel';
 import { useActivityTracking } from '@/features/tracking/hooks/useActivityTracking';
 import { colors, radius, spacing, typography } from '@/theme';
 
-const emptyRoute: ActivityRoute = [];
 const activityViewability = { itemVisiblePercentThreshold: 10, minimumViewTime: 120 };
 
 export default function HomeScreen() {
   const { section, perfil } = useLocalSearchParams<{ section?: string; perfil?: string }>();
-  const showProfile = section === 'tu' || section === 'actividades';
   const showFeed = section === 'feed';
-  const showMaps = !showProfile && !showFeed;
-  const showActivities = perfil === 'actividades' || section === 'actividades';
+  const profileTab = section === 'actividades' ? 'actividades' : section === 'tu' ? perfil ?? 'progreso' : 'mapas';
   const tracking = useActivityTracking();
-  const { isUpdateAvailable, isUpdatePending } = useUpdates();
+  const feed = useFeed();
   const [activities, setActivities] = useState<Activity[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -70,27 +67,34 @@ export default function HomeScreen() {
 
   const { activity, autoPaused, busy, currentSpeedKmh, elapsedMs, locationMessage, running } = tracking;
   const canStart = tracking.ready && activities !== null && !busy;
+  const guide = tracking.guidePostId
+    ? (feed.state?.published.find(post => post.id === tracking.guidePostId) ??
+      examplePosts.find(post => post.id === tracking.guidePostId))
+    : undefined;
 
-  function openRide() {
-    router.setParams({ section: 'mapas' });
-    if (!activity && canStart) void tracking.start();
+  function openRide(guidePostId?: string) {
+    if (guidePostId && (activity || !canStart)) return;
+    router.setParams({ section: 'rodada' });
+    if (!activity && canStart) void tracking.start(guidePostId);
   }
 
   async function finishAutoPausedRide() {
     if (await tracking.pause()) setEditingRide(true);
   }
 
-  if (activity && showMaps) {
+  if (activity && (section === 'rodada' || section === undefined || section === 'mapas')) {
     return (
       <>
         <LiveRideMap
           key={activity.startedAt}
           startedAt={activity.startedAt}
+          guideRoute={guide?.route}
           running={running}
           segment={tracking.segment}
           lastFixAt={tracking.lastFixAt}
           locationMessage={locationMessage}
           header={(
+            <>
             <View style={styles.rideHeader}>
               <Pressable
                 accessibilityRole="button"
@@ -104,6 +108,16 @@ export default function HomeScreen() {
                 {autoPaused ? 'Pausa automática' : running ? 'Rodada en curso' : 'Rodada pausada'}
               </Text>
             </View>
+            {guide && (
+              <View style={styles.guideLegend}>
+                <Text style={styles.guideLabel}>Ruta guardada · {guide.activity.name || 'Rodada'}</Text>
+                <Text style={styles.ownTrackLabel}>Mi recorrido</Text>
+              </View>
+            )}
+            {!guide && tracking.guidePostId && feed.error && (
+              <AppButton label="Volver a cargar la ruta guardada" size="md" variant="secondary" onPress={feed.retry} />
+            )}
+            </>
           )}
         >
           {route => (
@@ -142,63 +156,35 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      {showProfile && (
+      {!showFeed && (
         <View style={[styles.content, styles.profileHeader]}>
           <Text accessibilityRole="header" style={styles.title}>Tú</Text>
           <View style={styles.profileTabs}>
             {[
-              { label: 'Progreso', key: 'progreso', icon: ChartNoAxesCombined, selected: !showActivities },
-              { label: 'Actividades', key: 'actividades', icon: History, selected: showActivities },
-            ].map(({ label, key, icon: Icon, selected }) => (
-              <Pressable
-                key={key}
-                accessibilityRole="tab"
-                accessibilityState={{ selected }}
-                onPress={() => router.setParams({ section: 'tu', perfil: key })}
-                style={[styles.profileTab, selected && styles.profileSelected]}
-              >
-                <Icon size={20} color={selected ? colors.primary : colors.textSecondary} />
-                <Text style={[styles.tabLabel, selected && styles.selectedLabel]}>{label}</Text>
-              </Pressable>
-            ))}
+              { label: 'Progreso', key: 'progreso', icon: ChartNoAxesCombined },
+              { label: 'Actividades', key: 'actividades', icon: History },
+              { label: 'Mapas', key: 'mapas', icon: Map },
+            ].map(({ label, key, icon: Icon }) => {
+              const selected = key === profileTab;
+              return (
+                <Pressable
+                  key={key}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected }}
+                  onPress={() => router.setParams({ section: 'tu', perfil: key })}
+                  style={[styles.profileTab, selected && styles.profileSelected]}
+                >
+                  <Icon size={20} color={selected ? colors.primary : colors.textSecondary} />
+                  <Text style={[styles.tabLabel, selected && styles.selectedLabel]}>{label}</Text>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
       )}
-      {showFeed ? <FeedList /> : showMaps ? (
+      {showFeed ? <FeedList /> : profileTab === 'mapas' ? (
         <ScrollView style={styles.page} contentContainerStyle={styles.content}>
-          <View style={styles.header}>
-            <Text style={styles.brand}>TRAZA</Text>
-            <Text accessibilityRole="header" style={styles.title}>
-              Tu próxima rodada
-            </Text>
-            {!tracking.ready && (
-              tracking.error ? (
-                <ErrorState
-                  title="No pudimos recuperar la rodada"
-                  message={tracking.error}
-                  onRetry={tracking.retryRestore}
-                />
-              ) : <LoadingState message="Buscando una rodada pendiente…" />
-            )}
-            {tracking.ready && tracking.error && (
-              <Text accessibilityRole="alert" style={styles.error}>{tracking.error}</Text>
-            )}
-            {tracking.ready && (
-              <>
-                <View style={styles.idleMap}>
-                  <RideBasemap route={emptyRoute} />
-                </View>
-                <Text style={styles.body}>Toca + para comenzar una rodada. Activa la ubicación en segundo plano para registrar con la pantalla bloqueada.</Text>
-                <AppButton
-                  icon={Download}
-                  label={isUpdatePending ? 'Actualización lista' : isUpdateAvailable ? 'Actualización disponible' : 'Actualizaciones'}
-                  variant="secondary"
-                  onPress={() => router.push('/actualizaciones')}
-                />
-              </>
-            )}
-          </View>
-          <SavedRoutes />
+          <SavedRoutes canStart={canStart && !activity} onStart={post => openRide(post.id)} />
         </ScrollView>
       ) : loadError ? (
         <ErrorState
@@ -211,7 +197,7 @@ export default function HomeScreen() {
         />
       ) : activities === null ? (
         <LoadingState message="Cargando actividades…" />
-      ) : !showActivities ? (
+      ) : profileTab !== 'actividades' ? (
         <ProgressPanel activities={activities} />
       ) : (
         <FlatList
@@ -253,16 +239,15 @@ export default function HomeScreen() {
           }}
         />
       )}
+      {tracking.error && (
+        <View style={[styles.content, styles.trackingFeedback]}>
+          <Text accessibilityRole="alert" style={styles.error}>{tracking.error}</Text>
+          {!tracking.ready && (
+            <AppButton label="Reintentar recuperación" size="md" variant="secondary" onPress={tracking.retryRestore} />
+          )}
+        </View>
+      )}
       <View style={styles.navigation}>
-        <Pressable
-          accessibilityRole="tab"
-          accessibilityState={{ selected: showMaps }}
-          onPress={() => router.setParams({ section: 'mapas' })}
-          style={[styles.tab, showMaps && styles.selected]}
-        >
-          <Map size={20} color={showMaps ? colors.primary : colors.textSecondary} />
-          <Text style={[styles.tabLabel, showMaps && styles.selectedLabel]}>Mapas</Text>
-        </Pressable>
         <Pressable
           accessibilityRole="tab"
           accessibilityState={{ selected: showFeed }}
@@ -277,7 +262,7 @@ export default function HomeScreen() {
           accessibilityLabel={activity ? 'Abrir rodada actual' : 'Iniciar rodada'}
           accessibilityState={{ disabled: !activity && !canStart, busy }}
           disabled={!activity && !canStart}
-          onPress={openRide}
+          onPress={() => openRide()}
           style={({ pressed }) => [
             styles.startButton,
             (pressed || (!activity && !canStart)) && styles.pressed,
@@ -287,12 +272,12 @@ export default function HomeScreen() {
         </Pressable>
         <Pressable
           accessibilityRole="tab"
-          accessibilityState={{ selected: showProfile }}
+          accessibilityState={{ selected: !showFeed }}
           onPress={() => router.setParams({ section: 'tu' })}
-          style={[styles.tab, showProfile && styles.selected]}
+          style={[styles.tab, !showFeed && styles.selected]}
         >
-          <User size={20} color={showProfile ? colors.primary : colors.textSecondary} />
-          <Text style={[styles.tabLabel, showProfile && styles.selectedLabel]}>Tú</Text>
+          <User size={20} color={showFeed ? colors.textSecondary : colors.primary} />
+          <Text style={[styles.tabLabel, !showFeed && styles.selectedLabel]}>Tú</Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -300,6 +285,11 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  guideLegend: {
+    alignSelf: 'flex-start', backgroundColor: colors.background, borderRadius: radius.md, padding: spacing.sm,
+  },
+  guideLabel: { ...typography.bodySmall, color: colors.routeGuide },
+  ownTrackLabel: { ...typography.bodySmall, color: colors.primary },
   rideHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   historyButton: {
     width: 44,
@@ -328,11 +318,10 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   page: { flex: 1 },
   content: { padding: spacing.lg, width: '100%', maxWidth: 600, alignSelf: 'center' },
-  header: { gap: spacing.md, marginBottom: spacing.md },
-  brand: { ...typography.display, color: colors.primary },
   title: { ...typography.title, color: colors.textPrimary },
   body: { ...typography.body, color: colors.textSecondary },
   error: { ...typography.bodySmall, color: colors.error },
+  trackingFeedback: { paddingVertical: spacing.xs, gap: spacing.xs },
   profileHeader: { paddingBottom: spacing.xs, gap: spacing.sm },
   profileTabs: { flexDirection: 'row', borderBottomWidth: 1, borderColor: colors.border },
   profileTab: {
@@ -346,7 +335,6 @@ const styles = StyleSheet.create({
   historyMetrics: { flex: 1 },
   pressed: { opacity: 0.7 },
   separator: { height: spacing.sm },
-  idleMap: { borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
   navigation: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,9 +1,9 @@
 import { Link } from 'expo-router';
-import { Bookmark, ChevronRight, Heart } from 'lucide-react-native';
+import { Bookmark, ChevronRight, Heart, Play } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { AppCard, EmptyState, ErrorState, LoadingState, UserAvatar } from '@/components';
+import { AppButton, AppCard, EmptyState, ErrorState, LoadingState, UserAvatar } from '@/components';
 import { RouteMapPreview } from '@/features/activities/components/ActivityMapPreview';
 import { activityDateFormat, formatDistance, formatDuration } from '@/features/activities/format';
 import { colors, spacing, typography } from '@/theme';
@@ -95,7 +95,7 @@ export function FeedList() {
   );
 }
 
-export function SavedRoutes() {
+export function SavedRoutes({ canStart, onStart }: { canStart: boolean; onStart: (post: FeedPost) => void }) {
   const { state, error, retry } = useFeed();
   const posts: FeedPost[] = state ? [...state.published, ...examplePosts].filter(post => state.saved.includes(post.id)) : [];
 
@@ -107,7 +107,7 @@ export function SavedRoutes() {
       ) : posts.length === 0 ? (
         <EmptyState icon={Bookmark} title="Aún no hay rutas guardadas" message="Guarda una ruta desde el Feed para encontrarla aquí." />
       ) : posts.map(post => (
-        <AppCard key={post.id}>
+        <AppCard key={post.id} style={styles.card}>
           <Link href={{ pathname: '/feed/[id]', params: { id: post.id } }} asChild>
             <Pressable accessibilityRole="link" style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
               <Bookmark size={20} color={colors.primary} />
@@ -118,6 +118,15 @@ export function SavedRoutes() {
               <ChevronRight size={20} color={colors.textSecondary} />
             </Pressable>
           </Link>
+          <AppButton
+            label="Iniciar esta ruta"
+            accessibilityLabel={`Iniciar ruta: ${post.activity.name || 'Rodada'}`}
+            icon={Play}
+            size="md"
+            variant="secondary"
+            disabled={!canStart}
+            onPress={() => onStart(post)}
+          />
         </AppCard>
       ))}
     </View>

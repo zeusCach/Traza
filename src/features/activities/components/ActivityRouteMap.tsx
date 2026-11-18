@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Defs, Path, Pattern, Polyline, Rect } from 'react-native-svg';
 
@@ -39,11 +39,16 @@ export function projectRoute(route: ActivityRoute, viewportHeight = height) {
 }
 
 export const ActivityRouteMap = memo(function ActivityRouteMap({
-  route, live = false, fill = false,
-}: { route: ActivityRoute; live?: boolean; fill?: boolean }) {
+  route, guideRoute, live = false, fill = false,
+}: { route: ActivityRoute; guideRoute?: ActivityRoute; live?: boolean; fill?: boolean }) {
   const viewportHeight = live ? liveHeight : height;
-  const segments = projectRoute(route, viewportHeight);
+  const { segments, guide } = useMemo(() => {
+    const guideCount = guideRoute?.filter(segment => segment.length > 0).length ?? 0;
+    const projected = projectRoute(guideRoute ? [...guideRoute, ...route] : route, viewportHeight);
+    return { guide: projected.slice(0, guideCount), segments: projected.slice(guideCount) };
+  }, [guideRoute, route, viewportHeight]);
   const start = segments[0]?.[0];
+  const guideStart = guide[0]?.[0];
   const end = segments[segments.length - 1]?.at(-1);
   if (!start && !live) return null;
 
@@ -53,9 +58,10 @@ export const ActivityRouteMap = memo(function ActivityRouteMap({
         width="100%"
         height="100%"
         viewBox={`0 0 ${width} ${viewportHeight}`}
-        accessible={segments.length > 0}
+        accessible={segments.length > 0 || guide.length > 0}
         accessibilityRole="image"
-        accessibilityLabel={`Trazado GPS de la rodada, ${segments.length} ${segments.length === 1 ? 'tramo' : 'tramos'}`}
+        accessibilityLabel={guide.length > 0 ? 'Ruta guardada y trazado GPS de la rodada' :
+          `Trazado GPS de la rodada, ${segments.length} ${segments.length === 1 ? 'tramo' : 'tramos'}`}
       >
         {live && (
           <>
@@ -67,6 +73,11 @@ export const ActivityRouteMap = memo(function ActivityRouteMap({
             <Rect width={width} height={viewportHeight} fill="url(#ride-grid)" opacity={0.5} />
           </>
         )}
+        {guide.map((segment, index) => (
+          <Polyline key={`guide-${index}`} points={segment.map(({ x, y }) => `${x.toFixed(2)},${y.toFixed(2)}`).join(' ')}
+            fill="none" stroke={colors.routeGuide} strokeWidth={4} strokeDasharray="7 7" strokeLinecap="round" />
+        ))}
+        {guideStart && <Circle cx={guideStart.x} cy={guideStart.y} r={5} fill={colors.background} stroke={colors.routeGuide} strokeWidth={2} />}
         {segments.map((segment, index) => (
           segment.length === 1 ? (
             <Circle key={index} cx={segment[0].x} cy={segment[0].y} r={2.5} fill={colors.primary} />
