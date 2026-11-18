@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, StyleSheet, Text } from 'react-native';
 
-import { colors, spacing, typography } from '@/theme';
+import { spacing, typography, themedStyles } from '@/theme';
 
 import { RouteBackdrop } from './RouteBackdrop';
 
 export function StartupLoader({ ready, onDismiss }: { ready: boolean; onDismiss: () => void }) {
+  const styles = useStyles();
   const [reduceMotion, setReduceMotion] = useState<boolean>();
   const [drawn, setDrawn] = useState(false);
   const [progress] = useState(() => new Animated.Value(0));
@@ -62,7 +63,7 @@ export function StartupLoader({ ready, onDismiss }: { ready: boolean; onDismiss:
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   screen: {
     zIndex: 1,
     alignItems: 'center',
@@ -73,4 +74,4 @@ const styles = StyleSheet.create({
   },
   brand: { color: '#FFFFFF', fontSize: 62, fontWeight: '800', letterSpacing: 5, textAlign: 'center' },
   tagline: { color: colors.textPrimary, fontSize: typography.body.fontSize, textAlign: 'center' },
-});
+}));

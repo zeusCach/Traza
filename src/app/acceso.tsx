@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppButton } from '@/components';
 import { supabase } from '@/database/supabase';
 import { RouteBackdrop } from '@/features/auth/RouteBackdrop';
-import { colors, radius, spacing, typography } from '@/theme';
+import { radius, spacing, typography, themedStyles } from '@/theme';
 
 export default function AccessScreen() {
   const { modo } = useLocalSearchParams<{ modo?: string }>();
@@ -15,6 +15,7 @@ export default function AccessScreen() {
 }
 
 function AccessForm({ initialRegister }: { initialRegister: boolean }) {
+  const styles = useStyles();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -125,7 +126,7 @@ function AccessForm({ initialRegister }: { initialRegister: boolean }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.surface },
   keyboard: { flex: 1 },
   content: { width: '100%', maxWidth: 480, alignSelf: 'center', padding: spacing.xl, gap: spacing.sm },
@@ -142,4 +143,4 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
     paddingHorizontal: spacing.md,
   },
-});
+}));

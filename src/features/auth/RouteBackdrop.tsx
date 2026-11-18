@@ -1,13 +1,15 @@
 import { Animated, StyleSheet } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 
-import { colors } from '@/theme';
+import { useTheme } from '@/theme';
 
 const route = 'M -20 650 C 72 620 108 585 114 518 S 141 437 214 410 S 264 350 286 285 S 367 185 440 130';
 const routeLength = 780;
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 export function RouteBackdrop({ progress }: { progress?: Animated.Value }) {
+  const { colors } = useTheme();
+
   return (
     <Svg
       accessible={false}

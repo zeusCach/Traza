@@ -8,7 +8,7 @@ import Svg, { Circle, Defs, G, Path, Pattern, Polyline, Rect, Text as SvgText } 
 
 import { AppButton, AppCard } from '@/components';
 import type { Activity, ActivityRoute } from '@/database/activities';
-import { colors, radius, spacing, typography } from '@/theme';
+import { darkColors as colors, radius, spacing, typography, themedStyles } from '@/theme';
 
 import { activityDateFormat, averageSpeed, formatDistance, formatDuration, formatElevationGain, formatSpeed } from '../format';
 import { projectRoute } from './ActivityRouteMap';
@@ -44,6 +44,7 @@ function capturePng(svg: Svg) {
 }
 
 export function RideShareCard({ activity, route }: { activity: Activity; route: ActivityRoute }) {
+  const styles = useStyles();
   const svg = useRef<Svg>(null);
   const exporting = useRef(false);
   const [mode, setMode] = useState<Mode>('transparente');
@@ -246,7 +247,7 @@ export function RideShareCard({ activity, route }: { activity: Activity; route: 
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   card: { gap: spacing.sm },
   title: { ...typography.subtitle, color: colors.textPrimary },
   modes: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
@@ -271,4 +272,4 @@ const styles = StyleSheet.create({
   },
   caption: { ...typography.caption, color: colors.textSecondary, textAlign: 'center' },
   error: { ...typography.bodySmall, color: colors.error },
-});
+}));

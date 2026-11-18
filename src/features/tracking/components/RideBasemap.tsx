@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import type { ActivityRoute } from '@/database/activities';
 import { ActivityRouteMap } from '@/features/activities/components/ActivityRouteMap';
-import { colors, spacing, typography } from '@/theme';
+import { spacing, typography, themedStyles } from '@/theme';
 
 export interface RideBasemapProps {
   route: ActivityRoute;
@@ -12,6 +12,7 @@ export interface RideBasemapProps {
 }
 
 export function RideBasemap({ route, guideRoute, viewport, variant = 'live' }: RideBasemapProps) {
+  const styles = useStyles();
   if (variant === 'preview') {
     return <Text style={styles.notice}>El mapa de calles está disponible en la app móvil.</Text>;
   }
@@ -25,7 +26,7 @@ export function RideBasemap({ route, guideRoute, viewport, variant = 'live' }: R
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   notice: { ...typography.bodySmall, color: colors.textPrimary, padding: spacing.sm },
   fullscreen: { flex: 1 },
   floatingNotice: {
@@ -35,4 +36,4 @@ const styles = StyleSheet.create({
     maxWidth: '85%',
     backgroundColor: colors.background,
   },
-});
+}));

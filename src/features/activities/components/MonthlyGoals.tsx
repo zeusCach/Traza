@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { AppButton, AppCard } from '@/components';
-import { colors, radius, spacing, typography } from '@/theme';
+import { radius, spacing, typography, themedStyles } from '@/theme';
 
 import { formatDistance } from '../format';
 
@@ -26,6 +26,7 @@ export function MonthlyGoals({ initialGoals, distance, count }: {
   distance: number;
   count: number;
 }) {
+  const styles = useStyles();
   const [goals, setGoals] = useState(initialGoals);
   const [kilometers, setKilometers] = useState(initialGoals.kilometers ? String(initialGoals.kilometers) : '');
   const [rides, setRides] = useState(initialGoals.rides ? String(initialGoals.rides) : '');
@@ -99,7 +100,7 @@ export function MonthlyGoals({ initialGoals, distance, count }: {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   card: { gap: spacing.sm },
   title: { ...typography.subtitle, color: colors.textPrimary },
   caption: { ...typography.bodySmall, color: colors.textSecondary },
@@ -118,4 +119,4 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingHorizontal: spacing.sm,
   },
-});
+}));

@@ -9,23 +9,26 @@ import { View } from 'react-native';
 import { ErrorState } from '@/components';
 import { SessionProvider, useSession } from '@/features/auth/SessionProvider';
 import { StartupLoader } from '@/features/auth/StartupLoader';
-import { colors, trazaFonts } from '@/theme';
+import { ThemeProvider, trazaFonts, useTheme } from '@/theme';
 
 export default function RootLayout() {
   return (
-    <SessionProvider>
-      <StatusBar style="light" />
-      <AppNavigator />
-    </SessionProvider>
+    <ThemeProvider>
+      <SessionProvider>
+        <AppNavigator />
+      </SessionProvider>
+    </ThemeProvider>
   );
 }
 
 function AppNavigator() {
+  const { colors, scheme, ready: themeReady } = useTheme();
+
   const [fontsLoaded, fontError] = useFonts(trazaFonts);
   const session = useSession();
   const [showLoader, setShowLoader] = useState(true);
   const dismissLoader = useCallback(() => setShowLoader(false), []);
-  const ready = fontsLoaded && session !== undefined;
+  const ready = fontsLoaded && themeReady && session !== undefined;
 
   if (fontError) {
     return <ErrorState title="No pudimos preparar la aplicación" message={fontError.message} />;
@@ -33,6 +36,7 @@ function AppNavigator() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       {ready && (
         <View
           style={{ flex: 1 }}
@@ -43,6 +47,7 @@ function AppNavigator() {
             <Stack.Protected guard={!!session} redirectTo="/bienvenida">
               <Stack.Screen name="index" options={{ animation: 'fade' }} />
               <Stack.Screen name="cuenta" />
+              <Stack.Screen name="aspecto" />
               <Stack.Screen name="progreso" />
               <Stack.Screen name="actualizaciones" />
               <Stack.Screen name="activity/[id]" />

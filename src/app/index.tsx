@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton, AppCard, EmptyState, ErrorState, LoadingState } from '@/components';
 import { type Activity, type RideDetails, loadActivities, rideEffortLabels, saveActivity } from '@/database/activities';
+import { ProfileMenu } from '@/features/account/ProfileMenu';
 import { ActivityMapPreview } from '@/features/activities/components/ActivityMapPreview';
 import { ProgressPanel } from '@/features/activities/components/ProgressPanel';
 import { RideEditor } from '@/features/activities/components/RideEditor';
@@ -16,11 +17,13 @@ import { useFeed } from '@/features/feed/useFeed';
 import { LiveRideMap } from '@/features/tracking/components/LiveRideMap';
 import { RideDataPanel } from '@/features/tracking/components/RideDataPanel';
 import { useActivityTracking } from '@/features/tracking/hooks/useActivityTracking';
-import { colors, radius, spacing, typography } from '@/theme';
+import { radius, spacing, typography, useTheme, themedStyles } from '@/theme';
 
 const activityViewability = { itemVisiblePercentThreshold: 10, minimumViewTime: 120 };
 
 export default function HomeScreen() {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const { section, perfil } = useLocalSearchParams<{ section?: string; perfil?: string }>();
   const showFeed = section === 'feed';
   const profileTab = section === 'actividades' ? 'actividades' : section === 'tu' ? perfil ?? 'progreso' : 'mapas';
@@ -160,7 +163,7 @@ export default function HomeScreen() {
         <View style={[styles.content, styles.profileHeader]}>
           <View style={styles.profileTitleRow}>
             <Text accessibilityRole="header" style={styles.title}>Tú</Text>
-            <AppButton label="Cuenta" icon={User} variant="ghost" size="md" onPress={() => router.push('/cuenta')} />
+            <ProfileMenu />
           </View>
           <View style={styles.profileTabs}>
             {[
@@ -287,7 +290,7 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   guideLegend: {
     alignSelf: 'flex-start', backgroundColor: colors.background, borderRadius: radius.md, padding: spacing.sm,
   },
@@ -372,4 +375,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.primary,
   },
-});
+}));

@@ -4,9 +4,11 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RouteBackdrop } from '@/features/auth/RouteBackdrop';
-import { colors, radius, spacing, typography } from '@/theme';
+import { radius, spacing, typography, useTheme, themedStyles } from '@/theme';
 
 export default function WelcomeScreen() {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <SafeAreaView style={styles.screen}>
       <RouteBackdrop />
@@ -42,7 +44,7 @@ export default function WelcomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.surface },
   content: {
     flexGrow: 1,
@@ -81,4 +83,4 @@ const styles = StyleSheet.create({
   caption: { ...typography.bodySmall, color: colors.textSecondary },
   footer: { alignItems: 'center' },
   register: { ...typography.button, color: colors.primary, padding: spacing.sm, minHeight: 48 },
-});
+}));

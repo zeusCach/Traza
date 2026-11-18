@@ -6,7 +6,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "backgroundColor": "#101816",
     "ios": {
       "supportsTablet": false,
@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "mx.traza.app",
-      "versionCode": 4,
+      "versionCode": 5,
       "adaptiveIcon": {
         "backgroundColor": "#101816",
         "foregroundImage": "./assets/android-icon-foreground.png",

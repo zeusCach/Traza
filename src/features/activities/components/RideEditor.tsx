@@ -5,9 +5,8 @@ import {
 
 import { AppButton, AppCard } from '@/components';
 import { rideEffortLabels, rideEfforts, rideNameLimit, type RideDetails } from '@/database/activities';
-import { colors, radius, spacing, typography } from '@/theme';
+import { radius, spacing, typography, useTheme, themedStyles } from '@/theme';
 
-const effortColors = [colors.primary, '#65DDA0', '#FFAA52', colors.error];
 const lastLevel = rideEfforts.length - 1;
 const thumbRadius = 9;
 
@@ -16,6 +15,9 @@ function EffortSlider({ level, onChange, disabled }: {
   onChange: (level: number) => void;
   disabled: boolean;
 }) {
+  const { colors } = useTheme();
+  const effortColors = [colors.primary, '#65DDA0', '#FFAA52', colors.error];
+  const styles = useStyles();
   const [width, setWidth] = useState(0);
   const [position] = useState(() => new Animated.Value(level));
   const origin = useRef({ pageX: 0, localX: 0 });
@@ -96,6 +98,8 @@ export function RideEditor({ initial, onCancel, onSave }: {
   onCancel: () => void;
   onSave: (details: RideDetails) => Promise<void>;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [name, setName] = useState(initial?.name ?? '');
   const [level, setLevel] = useState(rideEfforts.indexOf(initial?.effort ?? 'normal'));
   const [saving, setSaving] = useState(false);
@@ -149,7 +153,7 @@ export function RideEditor({ initial, onCancel, onSave }: {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   overlay: { flex: 1, backgroundColor: '#000A' },
   dialog: { flexGrow: 1, justifyContent: 'center', padding: spacing.md },
   card: { width: '100%', maxWidth: 480, alignSelf: 'center', gap: spacing.sm },
@@ -168,4 +172,4 @@ const styles = StyleSheet.create({
   option: { minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center' },
   optionLabel: { ...typography.caption, color: colors.textSecondary },
   error: { ...typography.bodySmall, color: colors.error },
-});
+}));

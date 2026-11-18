@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Defs, Line, LinearGradient, Polygon, Polyline, Stop } from 'react-native-svg';
 
 import { AppCard } from '@/components';
-import { colors, spacing, typography } from '@/theme';
+import { spacing, typography, useTheme, themedStyles } from '@/theme';
 
 import { formatDistance, formatDuration, formatElevationGain } from '../format';
 import { type groupWeeks, shiftDays } from '../progress';
@@ -13,6 +13,8 @@ const width = 336;
 const bottom = 120;
 
 export function WeeklyProgress({ weeks }: { weeks: ReturnType<typeof groupWeeks>['weeks'] }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [selected, setSelected] = useState(weeks.length - 1);
   const week = weeks[selected];
   const maxDistance = Math.max(1000, ...weeks.map(item => item.distance));
@@ -79,7 +81,7 @@ export function WeeklyProgress({ weeks }: { weeks: ReturnType<typeof groupWeeks>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   card: { gap: spacing.sm },
   title: { ...typography.subtitle, color: colors.textPrimary },
   caption: { ...typography.caption, color: colors.textSecondary },
@@ -90,4 +92,4 @@ const styles = StyleSheet.create({
   targets: { flexDirection: 'row' },
   target: { flex: 1 },
   labels: { flexDirection: 'row', justifyContent: 'space-between' },
-});
+}));

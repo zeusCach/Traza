@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppButton, AppCard } from '@/components';
 import { loadActivityRoute, type Activity } from '@/database/activities';
-import { colors, spacing, typography } from '@/theme';
+import { spacing, typography, useTheme, themedStyles } from '@/theme';
 
 import { formatDuration } from '../format';
 import { bestRouteTimes, recordDistances } from '../progress';
@@ -13,6 +13,8 @@ import { bestRouteTimes, recordDistances } from '../progress';
 type RecordTime = { duration: number; startedAt: number };
 
 export function RideRecords({ activities }: { activities: Activity[] }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [records, setRecords] = useState<(RecordTime | null)[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -86,11 +88,11 @@ export function RideRecords({ activities }: { activities: Activity[] }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   card: { gap: spacing.xs },
   title: { ...typography.subtitle, color: colors.textPrimary },
   caption: { ...typography.bodySmall, color: colors.textSecondary },
   row: { flexDirection: 'row', alignItems: 'center', minHeight: 44, gap: spacing.xs, borderTopWidth: 1, borderColor: colors.border },
   label: { ...typography.label, color: colors.textPrimary, flex: 1 },
   time: { ...typography.button, color: colors.primary },
-});
+}));

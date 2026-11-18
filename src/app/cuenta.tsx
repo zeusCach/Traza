@@ -1,27 +1,44 @@
 import type { User } from '@supabase/supabase-js';
-import { router } from 'expo-router';
+import Constants from 'expo-constants';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
+import { KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton, LoadingState } from '@/components';
 import { supabase } from '@/database/supabase';
+import { metadataText } from '@/features/account/profileIdentity';
 import { useSession } from '@/features/auth/SessionProvider';
-import { colors, radius, spacing, typography } from '@/theme';
+import { radius, spacing, typography, themedStyles } from '@/theme';
 
 type Action = 'username' | 'residence' | 'password' | 'passwordCode' | 'delete' | 'signOut';
 
-function metadataText(user: User, key: string) {
-  const value: unknown = user.user_metadata[key];
-  return typeof value === 'string' ? value : '';
-}
+const sectionTitles = {
+  cuenta: 'Cuenta',
+  privacidad: 'Controles de privacidad',
+  notificaciones: 'Notificaciones',
+  acerca: 'Acerca de TRAZA',
+  eliminar: 'Eliminar cuenta',
+  salir: 'Cerrar sesión',
+} as const;
+
+type Section = keyof typeof sectionTitles;
 
 export default function AccountScreen() {
+  const styles = useStyles();
   const session = useSession();
+  const { seccion } = useLocalSearchParams<{ seccion?: string }>();
+  const section = seccion && Object.prototype.hasOwnProperty.call(sectionTitles, seccion) ? seccion as Section : 'cuenta';
+  const [settingsError, setSettingsError] = useState(false);
 
   function close() {
     if (router.canGoBack()) router.back();
-    else router.replace('/');
+    else router.replace({ pathname: '/', params: { section: 'tu' } });
+  }
+
+  function openSettings() {
+    setSettingsError(false);
+    void Linking.openSettings().catch(() => setSettingsError(true));
   }
 
   return (
@@ -29,16 +46,43 @@ export default function AccountScreen() {
       <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <AppButton label="Volver" variant="ghost" size="md" onPress={close} />
-          <Text accessibilityRole="header" style={styles.title}>Cuenta</Text>
+          <Text accessibilityRole="header" style={styles.title}>{sectionTitles[section]}</Text>
           {session === undefined && <LoadingState message="Cargando cuenta…" />}
-          {session && <AccountSettings key={session.user.id} user={session.user} />}
+          {session && (section === 'cuenta' || section === 'eliminar' || section === 'salir') && (
+            <AccountSettings key={session.user.id + section} user={session.user} section={section} />
+          )}
+          {section === 'privacidad' && (
+            <View style={styles.section}>
+              <Text style={styles.text}>Al publicar una rodada, tu nombre de usuario y la ruta quedan visibles para otros ciclistas del feed.</Text>
+              <Text style={styles.text}>Puedes retirar una publicación desde el detalle de la rodada. Tu correo y tu residencia son privados.</Text>
+              {Platform.OS !== 'web' && (
+                <AppButton label="Permisos de ubicación" variant="secondary" onPress={openSettings} />
+              )}
+            </View>
+          )}
+          {section === 'notificaciones' && (
+            <View style={styles.section}>
+              <Text style={styles.text}>Gestiona los permisos de notificaciones de TRAZA en los ajustes del dispositivo.</Text>
+              {Platform.OS !== 'web' && (
+                <AppButton label="Abrir ajustes del dispositivo" variant="secondary" onPress={openSettings} />
+              )}
+            </View>
+          )}
+          {settingsError && <Text accessibilityLiveRegion="polite" style={styles.danger}>No pudimos abrir los ajustes.</Text>}
+          {section === 'acerca' && (
+            <View style={styles.section}>
+              {Constants.expoConfig?.version && <Text style={styles.text}>Versión {Constants.expoConfig.version}</Text>}
+              <AppButton label="Actualizaciones" variant="secondary" onPress={() => router.push('/actualizaciones')} />
+            </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-function AccountSettings({ user }: { user: User }) {
+function AccountSettings({ user, section }: { user: User; section: 'cuenta' | 'eliminar' | 'salir' }) {
+  const styles = useStyles();
   const [username, setUsername] = useState<string>();
   const [profileError, setProfileError] = useState(false);
   const [profileAttempt, setProfileAttempt] = useState(0);
@@ -50,7 +94,6 @@ function AccountSettings({ user }: { user: User }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [needsPasswordCode, setNeedsPasswordCode] = useState(false);
   const [passwordCode, setPasswordCode] = useState('');
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteText, setDeleteText] = useState('');
   const [busy, setBusy] = useState<Action>();
   const [status, setStatus] = useState<{ action: Action; text: string }>();
@@ -58,7 +101,7 @@ function AccountSettings({ user }: { user: User }) {
   const fullName = [metadataText(user, 'first_name'), metadataText(user, 'last_name')].filter(Boolean).join(' ');
 
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase || section !== 'cuenta') return;
     let active = true;
     void supabase.from('profiles').select('display_name').eq('id', user.id).single().then(({ data, error }) => {
       if (!active) return;
@@ -66,7 +109,7 @@ function AccountSettings({ user }: { user: User }) {
       else setUsername(data.display_name);
     });
     return () => { active = false; };
-  }, [user.id, profileAttempt]);
+  }, [user.id, profileAttempt, section]);
 
   async function run(action: Action) {
     if (!supabase || busy) return;
@@ -169,6 +212,30 @@ function AccountSettings({ user }: { user: User }) {
     );
   }
 
+  if (section === 'eliminar') {
+    return (
+      <View style={styles.section}>
+        <Text style={styles.text}>Se eliminarán permanentemente tu cuenta y las rutas, publicaciones y guardados asociados en línea.</Text>
+        <Field label="Escribe ELIMINAR para confirmar" value={deleteText}
+          onChangeText={setDeleteText} autoCapitalize="characters" autoCorrect={false} editable={!busy} />
+        <AppButton label="Eliminar definitivamente" variant="secondary" loading={busy === 'delete'}
+          disabled={!!busy || deleteText !== 'ELIMINAR'} onPress={() => void run('delete')} />
+        {feedback('delete')}
+      </View>
+    );
+  }
+
+  if (section === 'salir') {
+    return (
+      <View style={styles.section}>
+        <Text style={styles.text}>{user.email}</Text>
+        <AppButton label="Cerrar sesión" variant="secondary" loading={busy === 'signOut'}
+          disabled={!!busy} onPress={() => void run('signOut')} />
+        {feedback('signOut')}
+      </View>
+    );
+  }
+
   return (
     <>
       <View style={styles.section}>
@@ -248,36 +315,13 @@ function AccountSettings({ user }: { user: User }) {
           }} />
         )}
         {feedback('password')}
-        <AppButton label="Cerrar sesión" variant="secondary" loading={busy === 'signOut'}
-          disabled={!!busy} onPress={() => void run('signOut')} />
-        {feedback('signOut')}
-      </View>
-
-      <View style={styles.section}>
-        <Text accessibilityRole="header" style={[styles.heading, styles.danger]}>Eliminar cuenta</Text>
-        {confirmDelete ? (
-          <>
-            <Text style={styles.text}>Se eliminarán permanentemente tu cuenta y las rutas, publicaciones y guardados asociados en línea.</Text>
-            <Field label="Escribe ELIMINAR para confirmar" value={deleteText}
-              onChangeText={setDeleteText} autoCapitalize="characters" autoCorrect={false} editable={!busy} />
-            <AppButton label="Eliminar definitivamente" variant="secondary" loading={busy === 'delete'}
-              disabled={!!busy || deleteText !== 'ELIMINAR'} onPress={() => void run('delete')} />
-            <AppButton label="Cancelar" variant="ghost" disabled={!!busy} onPress={() => {
-              setConfirmDelete(false);
-              setDeleteText('');
-              setStatus(undefined);
-            }} />
-          </>
-        ) : (
-          <AppButton label="Eliminar cuenta" variant="secondary" disabled={!!busy} onPress={() => setConfirmDelete(true)} />
-        )}
-        {feedback('delete')}
       </View>
     </>
   );
 }
 
 function Field({ label, ...props }: TextInputProps & { label: string }) {
+  const styles = useStyles();
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
@@ -286,7 +330,7 @@ function Field({ label, ...props }: TextInputProps & { label: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   content: { width: '100%', maxWidth: 480, alignSelf: 'center', padding: spacing.lg, gap: spacing.md },
   section: {
@@ -303,4 +347,4 @@ const styles = StyleSheet.create({
     ...typography.body, color: colors.textPrimary, backgroundColor: colors.background,
     borderColor: colors.border, borderWidth: 1, borderRadius: radius.md, minHeight: 48, paddingHorizontal: spacing.md,
   },
-});
+}));

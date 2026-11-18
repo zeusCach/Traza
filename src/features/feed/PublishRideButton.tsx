@@ -5,12 +5,14 @@ import { Text } from 'react-native';
 
 import { AppButton } from '@/components';
 import type { Activity, ActivityRoute } from '@/database/activities';
-import { colors, typography } from '@/theme';
+import { typography, useTheme } from '@/theme';
 
 import { useFeed } from './useFeed';
 import { publishRemoteRide, removeRemotePost } from './remoteFeed';
 
 export function PublishRideButton({ activity, route }: { activity: Activity; route: ActivityRoute }) {
+  const { colors } = useTheme();
+
   const { state, error, busy, run, retry, accountId } = useFeed(`ride:${activity.startedAt}`);
   const [confirm, setConfirm] = useState(false);
   const published = accountId && state?.published[0];

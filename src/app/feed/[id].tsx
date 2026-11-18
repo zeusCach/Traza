@@ -11,9 +11,10 @@ import { examplePosts, togglePost } from '@/features/feed/feedStorage';
 import { removeRemotePost } from '@/features/feed/remoteFeed';
 import { useFeed } from '@/features/feed/useFeed';
 import { RideBasemap } from '@/features/tracking/components/RideBasemap';
-import { colors, spacing, typography } from '@/theme';
+import { spacing, typography, themedStyles } from '@/theme';
 
 export default function FeedActivityScreen() {
+  const styles = useStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { state, error, busy, change, retry, run, accountId } = useFeed(`post:${id}`);
   const [confirm, setConfirm] = useState(false);
@@ -81,7 +82,7 @@ export default function FeedActivityScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.lg, gap: spacing.md, width: '100%', maxWidth: 600, alignSelf: 'center' },
   back: { alignSelf: 'flex-start' },
@@ -91,4 +92,4 @@ const styles = StyleSheet.create({
   author: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   authorText: { flex: 1 },
   metrics: { flexDirection: 'row', gap: spacing.sm },
-});
+}));

@@ -6,7 +6,7 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppButton, AppCard, EmptyState, ErrorState, LoadingState, UserAvatar } from '@/components';
 import { RouteMapPreview } from '@/features/activities/components/ActivityMapPreview';
 import { activityDateFormat, formatDistance, formatDuration } from '@/features/activities/format';
-import { colors, spacing, typography } from '@/theme';
+import { spacing, typography, useTheme, themedStyles } from '@/theme';
 
 import { examplePosts, togglePost, type FeedPost } from './feedStorage';
 import { useFeed } from './useFeed';
@@ -14,6 +14,8 @@ import { useFeed } from './useFeed';
 const feedViewability = { itemVisiblePercentThreshold: 10, minimumViewTime: 120 };
 
 export function FeedList() {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const { state, error, busy, change, retry, accountId } = useFeed();
   const [visiblePosts, setVisiblePosts] = useState<Set<string>>(() => new Set());
   const onPostsVisible = useCallback(({ viewableItems }: { viewableItems: { key: string }[] }) => {
@@ -98,6 +100,8 @@ export function FeedList() {
 }
 
 export function SavedRoutes({ canStart, onStart }: { canStart: boolean; onStart: (post: FeedPost) => void }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const { state, error, retry, accountId } = useFeed('saved');
   const posts: FeedPost[] = state
     ? (accountId ? state.published : [...state.published, ...examplePosts]).filter(post => state.saved.includes(post.id))
@@ -137,7 +141,7 @@ export function SavedRoutes({ canStart, onStart }: { canStart: boolean; onStart:
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   content: { width: '100%', maxWidth: 600, alignSelf: 'center', padding: spacing.lg, gap: spacing.md },
   header: { gap: spacing.xs },
   title: { ...typography.title, color: colors.textPrimary },
@@ -151,4 +155,4 @@ const styles = StyleSheet.create({
   action: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   active: { color: colors.primary },
   pressed: { opacity: 0.75 },
-});
+}));
