@@ -28,8 +28,8 @@ export function StartupLoader({ ready, onDismiss }: { ready: boolean; onDismiss:
     if (reduceMotion === undefined || drawn) return;
     const draw = Animated.timing(progress, {
       toValue: 1,
-      duration: reduceMotion ? 0 : 620,
-      easing: Easing.out(Easing.cubic),
+      duration: reduceMotion ? 0 : 1150,
+      easing: Easing.inOut(Easing.quad),
       useNativeDriver: false,
     });
     draw.start(({ finished }) => { if (finished) setDrawn(true); });
