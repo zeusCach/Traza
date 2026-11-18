@@ -5,6 +5,7 @@ import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 
 import { ErrorState, LoadingState } from '@/components';
+import { SessionProvider } from '@/features/auth/SessionProvider';
 import { colors, trazaFonts } from '@/theme';
 
 export default function RootLayout() {
@@ -19,7 +20,7 @@ export default function RootLayout() {
   }
 
   return (
-    <>
+    <SessionProvider>
       <StatusBar style="light" />
       <Stack
         screenOptions={{
@@ -27,6 +28,6 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: colors.background },
         }}
       />
-    </>
+    </SessionProvider>
   );
 }

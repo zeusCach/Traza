@@ -25,7 +25,7 @@ export default function HomeScreen() {
   const showFeed = section === 'feed';
   const profileTab = section === 'actividades' ? 'actividades' : section === 'tu' ? perfil ?? 'progreso' : 'mapas';
   const tracking = useActivityTracking();
-  const feed = useFeed();
+  const feed = useFeed(`post:${tracking.guidePostId ?? ''}`, !!tracking.guidePostId);
   const [activities, setActivities] = useState<Activity[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -158,7 +158,10 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.screen}>
       {!showFeed && (
         <View style={[styles.content, styles.profileHeader]}>
-          <Text accessibilityRole="header" style={styles.title}>Tú</Text>
+          <View style={styles.profileTitleRow}>
+            <Text accessibilityRole="header" style={styles.title}>Tú</Text>
+            <AppButton label="Cuenta" icon={User} variant="ghost" size="md" onPress={() => router.push('/cuenta')} />
+          </View>
           <View style={styles.profileTabs}>
             {[
               { label: 'Progreso', key: 'progreso', icon: ChartNoAxesCombined },
@@ -323,6 +326,7 @@ const styles = StyleSheet.create({
   error: { ...typography.bodySmall, color: colors.error },
   trackingFeedback: { paddingVertical: spacing.xs, gap: spacing.xs },
   profileHeader: { paddingBottom: spacing.xs, gap: spacing.sm },
+  profileTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   profileTabs: { flexDirection: 'row', borderBottomWidth: 1, borderColor: colors.border },
   profileTab: {
     flex: 1, minHeight: 54, alignItems: 'center', justifyContent: 'center',
