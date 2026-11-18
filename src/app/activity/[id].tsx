@@ -11,6 +11,7 @@ import { RideEditor } from '@/features/activities/components/RideEditor';
 import { RideShareCard } from '@/features/activities/components/RideShareCard';
 import { activityDateFormat, averageSpeed, formatDistance, formatDuration, formatElevationGain, formatSpeed } from '@/features/activities/format';
 import { RideBasemap } from '@/features/tracking/components/RideBasemap';
+import { PublishRideButton } from '@/features/feed/PublishRideButton';
 import { colors, spacing, typography } from '@/theme';
 
 type SummaryState =
@@ -127,6 +128,7 @@ function ActivitySummary({ startedAt }: { startedAt: number }) {
         )}
       </AppCard>
       {route?.some(segment => segment.some(point => point.altitudeM != null)) && <ElevationProfile route={route} />}
+      {route !== null && <PublishRideButton activity={activity} route={route} />}
       {route?.some(segment => segment.length > 0) && <RideShareCard activity={activity} route={route} />}
     </>
   );

@@ -1,6 +1,6 @@
 import { Link, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useUpdates } from 'expo-updates';
-import { ChartNoAxesCombined, ChevronRight, Download, History, Map, Pause, Play, Plus, User } from 'lucide-react-native';
+import { ChartNoAxesCombined, ChevronRight, Download, History, Map, Newspaper, Pause, Play, Plus, User } from 'lucide-react-native';
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,6 +11,7 @@ import { ActivityMapPreview } from '@/features/activities/components/ActivityMap
 import { ProgressPanel } from '@/features/activities/components/ProgressPanel';
 import { RideEditor } from '@/features/activities/components/RideEditor';
 import { activityDateFormat, averageSpeed, formatDistance, formatDuration, formatSpeed } from '@/features/activities/format';
+import { FeedList, SavedRoutes } from '@/features/feed/FeedList';
 import { LiveRideMap } from '@/features/tracking/components/LiveRideMap';
 import { RideBasemap } from '@/features/tracking/components/RideBasemap';
 import { RideDataPanel } from '@/features/tracking/components/RideDataPanel';
@@ -23,6 +24,8 @@ const activityViewability = { itemVisiblePercentThreshold: 10, minimumViewTime: 
 export default function HomeScreen() {
   const { section, perfil } = useLocalSearchParams<{ section?: string; perfil?: string }>();
   const showProfile = section === 'tu' || section === 'actividades';
+  const showFeed = section === 'feed';
+  const showMaps = !showProfile && !showFeed;
   const showActivities = perfil === 'actividades' || section === 'actividades';
   const tracking = useActivityTracking();
   const { isUpdateAvailable, isUpdatePending } = useUpdates();
@@ -77,7 +80,7 @@ export default function HomeScreen() {
     if (await tracking.pause()) setEditingRide(true);
   }
 
-  if (activity && !showProfile) {
+  if (activity && showMaps) {
     return (
       <>
         <LiveRideMap
@@ -161,7 +164,7 @@ export default function HomeScreen() {
           </View>
         </View>
       )}
-      {!showProfile ? (
+      {showFeed ? <FeedList /> : showMaps ? (
         <ScrollView style={styles.page} contentContainerStyle={styles.content}>
           <View style={styles.header}>
             <Text style={styles.brand}>TRAZA</Text>
@@ -195,6 +198,7 @@ export default function HomeScreen() {
               </>
             )}
           </View>
+          <SavedRoutes />
         </ScrollView>
       ) : loadError ? (
         <ErrorState
@@ -252,12 +256,21 @@ export default function HomeScreen() {
       <View style={styles.navigation}>
         <Pressable
           accessibilityRole="tab"
-          accessibilityState={{ selected: !showProfile }}
+          accessibilityState={{ selected: showMaps }}
           onPress={() => router.setParams({ section: 'mapas' })}
-          style={[styles.tab, !showProfile && styles.selected]}
+          style={[styles.tab, showMaps && styles.selected]}
         >
-          <Map size={20} color={showProfile ? colors.textSecondary : colors.primary} />
-          <Text style={[styles.tabLabel, !showProfile && styles.selectedLabel]}>Mapas</Text>
+          <Map size={20} color={showMaps ? colors.primary : colors.textSecondary} />
+          <Text style={[styles.tabLabel, showMaps && styles.selectedLabel]}>Mapas</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="tab"
+          accessibilityState={{ selected: showFeed }}
+          onPress={() => router.setParams({ section: 'feed' })}
+          style={[styles.tab, showFeed && styles.selected]}
+        >
+          <Newspaper size={20} color={showFeed ? colors.primary : colors.textSecondary} />
+          <Text style={[styles.tabLabel, showFeed && styles.selectedLabel]}>Feed</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
