@@ -3,6 +3,7 @@ export const colors = {
   surface: '#19231F',
   surfaceElevated: '#222E28',
   primary: '#B8F36B',
+  routeGuide: '#9BCBFF',
   textPrimary: '#F4F7F2',
   textSecondary: '#929D95',
   border: '#303C35',

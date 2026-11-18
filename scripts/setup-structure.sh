@@ -2,18 +2,18 @@
 # Crea la arquitectura de carpetas de TRAZA. Ejecutar desde la raíz del proyecto.
 set -euo pipefail
 
-if [ ! -f "package.json" ] || [ ! -d "app" ] && [ ! -f "app.json" ]; then
+if [ ! -f "package.json" ] || [ ! -f "app.json" ]; then
   echo "Ejecuta este script desde la raíz del proyecto traza." >&2
   exit 1
 fi
 
-# ---------- Rutas (Expo Router, raíz: app/) ----------
+# ---------- Rutas (Expo Router, raíz: src/app/) ----------
 mkdir -p \
-  "app/(auth)" \
-  "app/(tabs)" \
-  "app/record" \
-  "app/activity" \
-  "app/settings"
+  "src/app/(auth)" \
+  "src/app/(tabs)" \
+  "src/app/record" \
+  "src/app/activity" \
+  "src/app/settings"
 
 # ---------- Código fuente (alias @/* -> src/) ----------
 mkdir -p \
@@ -44,7 +44,7 @@ mkdir -p \
   "src/lib"
 
 # ---------- Marcadores para que Git conserve carpetas vacías ----------
-find app src -type d -empty -exec touch {}/.gitkeep \;
+find src -type d -empty -exec touch {}/.gitkeep \;
 
 echo "Arquitectura creada:"
-find app src -type d | sort
+find src -type d | sort
