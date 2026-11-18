@@ -40,7 +40,7 @@ function AppNavigator() {
           importantForAccessibility={showLoader ? 'no-hide-descendants' : 'auto'}
         >
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
-            <Stack.Protected guard={!!session}>
+            <Stack.Protected guard={!!session} redirectTo="/bienvenida">
               <Stack.Screen name="index" options={{ animation: 'fade' }} />
               <Stack.Screen name="cuenta" />
               <Stack.Screen name="progreso" />
@@ -48,8 +48,11 @@ function AppNavigator() {
               <Stack.Screen name="activity/[id]" />
               <Stack.Screen name="feed/[id]" />
             </Stack.Protected>
-            <Stack.Protected guard={!session}>
+            <Stack.Protected guard={!session} redirectTo="/">
               <Stack.Screen name="bienvenida" options={{ animation: 'fade' }} />
+            </Stack.Protected>
+            {/* Send any restored credentials route to welcome during startup. */}
+            <Stack.Protected guard={!session && !showLoader} redirectTo={session ? '/' : '/bienvenida'}>
               <Stack.Screen name="acceso" options={{ animation: 'fade' }} />
             </Stack.Protected>
           </Stack>
