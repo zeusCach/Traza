@@ -21,6 +21,7 @@ export interface Activity extends RideDetails {
   durationMs: number;
   distanceM: number | null;
   elevationGainM?: number | null;
+  maxSpeedKmh?: number | null;
 }
 
 export interface RoutePoint {
@@ -60,7 +61,9 @@ function isActivity(value: unknown): value is Activity {
     (activity.distanceM === null ||
       (typeof activity.distanceM === 'number' && Number.isFinite(activity.distanceM))) &&
     (activity.elevationGainM == null ||
-      (Number.isFinite(activity.elevationGainM) && activity.elevationGainM >= 0))
+      (Number.isFinite(activity.elevationGainM) && activity.elevationGainM >= 0)) &&
+    (activity.maxSpeedKmh == null ||
+      (Number.isFinite(activity.maxSpeedKmh) && activity.maxSpeedKmh >= 0))
   );
 }
 

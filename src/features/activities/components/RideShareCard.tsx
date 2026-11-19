@@ -43,7 +43,11 @@ function capturePng(svg: Svg) {
   });
 }
 
-export function RideShareCard({ activity, route }: { activity: Activity; route: ActivityRoute }) {
+export function RideShareCard({ activity, route, maxSpeedKmh }: {
+  activity: Activity;
+  route: ActivityRoute;
+  maxSpeedKmh: number | null;
+}) {
   const styles = useStyles();
   const svg = useRef<Svg>(null);
   const exporting = useRef(false);
@@ -53,19 +57,18 @@ export function RideShareCard({ activity, route }: { activity: Activity; route: 
   const [notice, setNotice] = useState<string | null>(null);
   const transparent = mode === 'transparente';
   const detailed = mode === 'detalle';
-  const routeHeight = transparent ? 240 : detailed ? 330 : 370;
+  const routeHeight = transparent ? 240 : detailed ? 300 : 370;
   const segments = useMemo(() => projectRoute(route, routeHeight), [route, routeHeight]);
   const start = segments[0]?.[0];
   const end = segments.at(-1)?.at(-1);
   const speed = averageSpeed(activity.distanceM, activity.durationMs);
-  const metrics = [
-    { label: 'Distancia', value: activity.distanceM === null ? '—' : `${formatDistance(activity.distanceM)} km` },
+  const speedMetrics = [
     { label: 'Velocidad media', value: speed === null ? '—' : `${formatSpeed(speed)} km/h` },
-    { label: 'Desnivel positivo', value: activity.elevationGainM == null ? '—' : `${formatElevationGain(activity.elevationGainM)} m` },
+    { label: 'Velocidad máxima', value: maxSpeedKmh === null ? '—' : `${formatSpeed(maxSpeedKmh)} km/h` },
   ];
   const summaryMetrics = [
-    metrics[0],
-    { ...metrics[2], label: 'Desnivel' },
+    { label: 'Distancia', value: activity.distanceM === null ? '—' : `${formatDistance(activity.distanceM)} km` },
+    { label: 'Desnivel', value: activity.elevationGainM == null ? '—' : `${formatElevationGain(activity.elevationGainM)} m` },
     { label: 'Duración', value: formatDuration(activity.durationMs) },
   ];
 
@@ -161,10 +164,16 @@ export function RideShareCard({ activity, route }: { activity: Activity; route: 
             </>
           )}
           {transparent ? <G fill="#FFFFFF" fontFamily="sans-serif" textAnchor="middle">
-            {metrics.map(({ label, value }, index) => (
+            {summaryMetrics.slice(0, 2).map(({ label, value }, index) => (
               <G key={label} transform={`translate(0 ${index * 92})`}>
                 <SvgText x={180} y={65} fontSize={20} fontWeight="600">{label}</SvgText>
                 <SvgText x={180} y={110} fontSize={43} fontWeight="800">{value}</SvgText>
+              </G>
+            ))}
+            {speedMetrics.map(({ label, value }, index) => (
+              <G key={label} transform={`translate(${90 + index * 180} 249)`}>
+                <SvgText fontSize={16} fontWeight="600">{label}</SvgText>
+                <SvgText y={41} fontSize={29} fontWeight="800">{value}</SvgText>
               </G>
             ))}
             <SvgText x={180} y={603} fontSize={44} fontWeight="900" letterSpacing={2}>TRAZA</SvgText>
@@ -174,12 +183,12 @@ export function RideShareCard({ activity, route }: { activity: Activity; route: 
                 <SvgText x={22} y={48} fontSize={29} fontWeight="900" letterSpacing={2}>TRAZA</SvgText>
                 <SvgText x={22} y={72} fontSize={13} fill={colors.textSecondary}>{activityDateFormat.format(activity.startedAt)}</SvgText>
                 <SvgText x={325} y={118} textAnchor="end" fontSize={13}>↑ N</SvgText>
-                <Circle cx={24} cy={444} r={4} fill="#FFFFFF" />
-                <SvgText x={35} y={448} fontSize={12}>Inicio</SvgText>
-                <Circle cx={94} cy={444} r={4} fill={colors.primary} />
-                <SvgText x={105} y={448} fontSize={12}>Fin</SvgText>
-                {[...summaryMetrics, metrics[1]].map(({ label, value }, index) => (
-                  <G key={label} transform={`translate(${index % 2 ? 190 : 22} ${index < 2 ? 484 : 555})`}>
+                <Circle cx={24} cy={414} r={4} fill="#FFFFFF" />
+                <SvgText x={35} y={418} fontSize={12}>Inicio</SvgText>
+                <Circle cx={94} cy={414} r={4} fill={colors.primary} />
+                <SvgText x={105} y={418} fontSize={12}>Fin</SvgText>
+                {[...summaryMetrics.slice(0, 2), ...speedMetrics, summaryMetrics[2]].map(({ label, value }, index) => (
+                  <G key={label} transform={`translate(${index % 2 ? 190 : 22} ${451 + Math.floor(index / 2) * 62})`}>
                     <SvgText fontSize={14} fill={colors.textSecondary}>{label}</SvgText>
                     <SvgText y={31} fontSize={25} fontWeight="800">{value}</SvgText>
                   </G>
@@ -194,7 +203,12 @@ export function RideShareCard({ activity, route }: { activity: Activity; route: 
                     <SvgText y={29} fontSize={23} fontWeight="800">{value}</SvgText>
                   </G>
                 ))}
-                <SvgText x={180} y={581} fontSize={15}>{metrics[1].label} · {metrics[1].value}</SvgText>
+                {speedMetrics.map(({ label, value }, index) => (
+                  <G key={label} transform={`translate(${90 + index * 180} 571)`}>
+                    <SvgText fontSize={14} fontWeight="600">{label}</SvgText>
+                    <SvgText y={29} fontSize={23} fontWeight="800">{value}</SvgText>
+                  </G>
+                ))}
               </G>
             )}
           </G>}

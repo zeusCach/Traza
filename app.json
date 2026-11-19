@@ -16,7 +16,7 @@
       "package": "mx.traza.app",
       "versionCode": 6,
       "adaptiveIcon": {
-        "backgroundColor": "#101816",
+        "backgroundColor": "#101C18",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"

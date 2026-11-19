@@ -1,5 +1,5 @@
-import { Camera, type CameraRef, GeoJSONSource, type GeoJSONSourceProps, type InitialViewState, Layer, type LngLat, Map, RasterDEMSource } from '@maplibre/maplibre-react-native';
-import { LocateFixed, Maximize, Mountain, RefreshCw } from 'lucide-react-native';
+import { Camera, type CameraRef, GeoJSONSource, type GeoJSONSourceProps, type InitialViewState, Layer, type LngLat, Map, RasterDEMSource, RasterSource } from '@maplibre/maplibre-react-native';
+import { LocateFixed, Maximize, RefreshCw } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -11,8 +11,13 @@ import type { RideBasemapProps } from './RideBasemap';
 
 const styleUrl = 'https://tiles.openfreemap.org/styles/liberty';
 const terrainTiles = ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'];
+const satelliteKey = process.env.EXPO_PUBLIC_MAPTILER_KEY?.trim();
+const satelliteTileJson = satelliteKey
+  ? `https://api.maptiler.com/maps/hybrid-v4/256/tiles.json?key=${encodeURIComponent(satelliteKey)}`
+  : undefined;
 const initialView = { center: [-102, 23] as LngLat, zoom: 4 };
 const rideZoom = 16;
+const mapModes = ['2D', '3D'] as const;
 
 function coordinates(point: RoutePoint): LngLat {
   return [point.longitude, point.latitude];
@@ -51,7 +56,10 @@ export default memo(function NativeRideBasemap({ route, guideRoute, viewport, va
   const centered = useRef(false);
   const [ready, setReady] = useState(false);
   const [following, setFollowing] = useState(true);
-  const [relief, setRelief] = useState(true);
+  const [mapMode, setMapMode] = useState<(typeof mapModes)[number]>('2D');
+  const [satellite, setSatellite] = useState(false);
+  const is3D = mapMode === '3D';
+  const pitch = is3D ? 50 : 0;
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const latest = live ? route.at(-1)?.at(-1) : undefined;
@@ -144,7 +152,7 @@ export default memo(function NativeRideBasemap({ route, guideRoute, viewport, va
         doubleTapZoom={!preview}
         doubleTapHoldZoom={!preview}
         touchRotate={!preview}
-        touchPitch={!preview}
+        touchPitch={is3D}
         compass={!preview}
         contentInset={viewport}
         attributionPosition={viewport ? { top: viewport.top + 8, right: viewport.right + 8 } : { top: 8, left: 8 }}
@@ -158,8 +166,13 @@ export default memo(function NativeRideBasemap({ route, guideRoute, viewport, va
           if (live && nativeEvent.userInteraction) setFollowing(false);
         }}
       >
-        <Camera ref={camera} initialViewState={view} />
-        {!preview && relief && (
+        <Camera ref={camera} initialViewState={{ ...view, pitch }} pitch={pitch} duration={300} easing="ease" />
+        {satellite && satelliteTileJson && (
+          <RasterSource id="ride-satellite" url={satelliteTileJson} tileSize={256}>
+            <Layer type="raster" id="ride-satellite-imagery" afterId="label_country_1" />
+          </RasterSource>
+        )}
+        {is3D && !satellite && (
           <RasterDEMSource
             id="ride-elevation"
             tiles={terrainTiles}
@@ -225,15 +238,31 @@ export default memo(function NativeRideBasemap({ route, guideRoute, viewport, va
           ? { top: viewport.top + 56, right: viewport.right + spacing.sm }
           : { bottom: spacing.xl + spacing.sm },
       ]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={relief ? 'Ocultar relieve' : 'Mostrar relieve'}
-          accessibilityState={{ selected: relief }}
-          onPress={() => setRelief(current => !current)}
-          style={styles.button}
-        >
-          <Mountain size={22} color={relief ? colors.primary : colors.textPrimary} />
-        </Pressable>
+        <View style={styles.modeSelector} accessibilityRole="radiogroup" accessibilityLabel="Modo del mapa">
+          {mapModes.map(mode => (
+            <Pressable
+              key={mode}
+              accessibilityRole="radio"
+              accessibilityLabel={`Vista ${mode}`}
+              accessibilityState={{ checked: mapMode === mode }}
+              onPress={() => setMapMode(mode)}
+              style={[styles.button, mapMode === mode && styles.selectedMode]}
+            >
+              <Text style={[styles.modeLabel, mapMode === mode && styles.selectedModeLabel]}>{mode}</Text>
+            </Pressable>
+          ))}
+        </View>
+        {satelliteTileJson && (
+          <Pressable
+            accessibilityRole="switch"
+            accessibilityLabel="Vista satelital"
+            accessibilityState={{ checked: satellite }}
+            onPress={() => setSatellite(current => !current)}
+            style={[styles.button, styles.satelliteButton, satellite && styles.selectedMode]}
+          >
+            <Text style={[styles.modeLabel, satellite && styles.selectedModeLabel]}>Satélite</Text>
+          </Pressable>
+        )}
         {live ? <Pressable
           accessibilityRole="button"
           accessibilityLabel="Centrar en mi posición"
@@ -263,7 +292,7 @@ const useStyles = themedStyles(colors => StyleSheet.create({
   previewFrame: { flex: 1, backgroundColor: colors.surface },
   previewNotice: { ...typography.caption, color: colors.textSecondary, padding: spacing.sm },
   fullscreen: { flex: 1, backgroundColor: colors.surface },
-  controls: { position: 'absolute', right: spacing.sm, gap: spacing.xs },
+  controls: { position: 'absolute', right: spacing.sm, gap: spacing.xs, alignItems: 'flex-end' },
   button: {
     width: 44,
     height: 44,
@@ -272,6 +301,11 @@ const useStyles = themedStyles(colors => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  modeSelector: { flexDirection: 'row', borderRadius: radius.pill, backgroundColor: colors.background },
+  satelliteButton: { width: 'auto', minWidth: 88, paddingHorizontal: spacing.sm },
+  selectedMode: { backgroundColor: colors.primary },
+  modeLabel: { ...typography.caption, color: colors.textPrimary },
+  selectedModeLabel: { color: colors.background },
   disabled: { opacity: 0.5 },
   retry: {
     position: 'absolute',

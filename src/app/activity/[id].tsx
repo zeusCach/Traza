@@ -10,6 +10,7 @@ import { ElevationProfile } from '@/features/activities/components/ElevationProf
 import { RideEditor } from '@/features/activities/components/RideEditor';
 import { RideShareCard } from '@/features/activities/components/RideShareCard';
 import { activityDateFormat, averageSpeed, formatDistance, formatDuration, formatElevationGain, formatSpeed } from '@/features/activities/format';
+import { estimateMaxSpeed } from '@/features/activities/routeDistance';
 import { RideBasemap } from '@/features/tracking/components/RideBasemap';
 import { PublishRideButton } from '@/features/feed/PublishRideButton';
 import { spacing, typography, themedStyles } from '@/theme';
@@ -90,6 +91,7 @@ function ActivitySummary({ startedAt }: { startedAt: number }) {
   }
 
   const { activity, route } = summary;
+  const maxSpeedKmh = activity.maxSpeedKmh ?? estimateMaxSpeed(route);
 
   async function saveDetails(details: RideDetails) {
     const updated = await updateRideDetails(startedAt, details);
@@ -115,10 +117,17 @@ function ActivitySummary({ startedAt }: { startedAt: number }) {
           value={formatSpeed(averageSpeed(activity.distanceM, activity.durationMs))}
           unit="km/h"
         />
-        {activity.elevationGainM != null && (
-          <MetricCard label="Desnivel positivo" value={formatElevationGain(activity.elevationGainM)} unit="m" icon={Mountain} />
-        )}
+        <MetricCard
+          label="Velocidad máxima"
+          value={formatSpeed(maxSpeedKmh)}
+          unit={maxSpeedKmh === null ? undefined : 'km/h'}
+        />
       </View>
+      {activity.elevationGainM != null && (
+        <View style={styles.metrics}>
+          <MetricCard label="Desnivel positivo" value={formatElevationGain(activity.elevationGainM)} unit="m" icon={Mountain} />
+        </View>
+      )}
       <Text accessibilityRole="header" style={styles.heading}>Recorrido</Text>
       <AppCard>
         {route === null ? (
@@ -131,7 +140,9 @@ function ActivitySummary({ startedAt }: { startedAt: number }) {
       </AppCard>
       {route?.some(segment => segment.some(point => point.altitudeM != null)) && <ElevationProfile route={route} />}
       {route !== null && <PublishRideButton activity={activity} route={route} />}
-      {route?.some(segment => segment.length > 0) && <RideShareCard activity={activity} route={route} />}
+      {route?.some(segment => segment.length > 0) && (
+        <RideShareCard activity={activity} route={route} maxSpeedKmh={maxSpeedKmh} />
+      )}
     </>
   );
 }

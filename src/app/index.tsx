@@ -68,7 +68,7 @@ export default function HomeScreen() {
     router.push({ pathname: '/activity/[id]', params: { id: String(activity.startedAt) } });
   }
 
-  const { activity, autoPaused, busy, currentSpeedKmh, elapsedMs, locationMessage, running } = tracking;
+  const { activity, autoPaused, busy, currentSpeedKmh, elapsedMs, locationMessage, recovered, running } = tracking;
   const canStart = tracking.ready && activities !== null && !busy;
   const guide = tracking.guidePostId
     ? (feed.state?.published.find(post => post.id === tracking.guidePostId) ??
@@ -108,7 +108,7 @@ export default function HomeScreen() {
                 <History size={22} color={colors.textPrimary} />
               </Pressable>
               <Text accessibilityRole="header" style={styles.rideTitle}>
-                {autoPaused ? 'Pausa automática' : running ? 'Rodada en curso' : 'Rodada pausada'}
+                {autoPaused ? 'Pausa automática' : running ? 'Rodada en curso' : recovered ? 'Rodada recuperada' : 'Rodada pausada'}
               </Text>
             </View>
             {guide && (
@@ -245,6 +245,18 @@ export default function HomeScreen() {
           }}
         />
       )}
+      {recovered && activity && (
+        <View style={[styles.content, styles.trackingFeedback]}>
+          <AppCard style={styles.recoveryCard}>
+            <Text accessibilityRole="header" style={styles.activityName}>Rodada recuperada</Text>
+            <Text style={styles.body}>
+              {activityDateFormat.format(activity.startedAt)} · {formatDuration(activity.durationMs)}
+              {activity.distanceM !== null && ` · ${formatDistance(activity.distanceM)} km`}
+            </Text>
+            <AppButton label="Abrir rodada recuperada" size="md" variant="secondary" onPress={() => openRide()} />
+          </AppCard>
+        </View>
+      )}
       {tracking.error && (
         <View style={[styles.content, styles.trackingFeedback]}>
           <Text accessibilityRole="alert" style={styles.error}>{tracking.error}</Text>
@@ -328,6 +340,7 @@ const useStyles = themedStyles(colors => StyleSheet.create({
   body: { ...typography.body, color: colors.textSecondary },
   error: { ...typography.bodySmall, color: colors.error },
   trackingFeedback: { paddingVertical: spacing.xs, gap: spacing.xs },
+  recoveryCard: { gap: spacing.xs },
   profileHeader: { paddingBottom: spacing.xs, gap: spacing.sm },
   profileTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   profileTabs: { flexDirection: 'row', borderBottomWidth: 1, borderColor: colors.border },

@@ -16,6 +16,7 @@ export interface RideDraft extends Activity {
   checkpointAt: number;
   lastFixAt: number | null;
   speedKmh: number | null;
+  maxSpeedKmh: number | null;
   elevationGainM: number | null;
   lastAltitudeM: number | null;
   guidePostId: string | null;
@@ -89,6 +90,9 @@ function openDraftDatabase() {
       }
       if (schemaVersion < 4) {
         await db.execAsync('ALTER TABLE draft ADD COLUMN guidePostId TEXT; PRAGMA user_version = 4;');
+      }
+      if (schemaVersion < 5) {
+        await db.execAsync('ALTER TABLE draft ADD COLUMN maxSpeedKmh REAL; PRAGMA user_version = 5;');
       }
     }));
     return db;
@@ -236,6 +240,9 @@ export function appendRideLocations(locations: LocationObject[], source: 'backgr
       draft.lastFixAt = timestamp;
       const speed = coords.speed;
       draft.speedKmh = speed !== null && Number.isFinite(speed) && speed >= 0 ? speed * 3.6 : null;
+      if (draft.speedKmh !== null) {
+        draft.maxSpeedKmh = Math.max(draft.maxSpeedKmh ?? 0, draft.speedKmh);
+      }
       const altitude = coords.altitude;
       const altitudeM = altitude !== null && Number.isFinite(altitude) ? altitude : null;
       const point = { latitude: coords.latitude, longitude: coords.longitude, timestamp, altitudeM };
@@ -284,9 +291,11 @@ export function appendRideLocations(locations: LocationObject[], source: 'backgr
     }
     await db.runAsync(`
       UPDATE draft SET checkpointAt = ?, lastFixAt = ?, speedKmh = ?, distanceM = ?,
-        elevationGainM = ?, lastAltitudeM = ?, durationMs = ?, segment = ?, activeSince = ?, stationarySince = ?
+        elevationGainM = ?, lastAltitudeM = ?, durationMs = ?, segment = ?, activeSince = ?, stationarySince = ?,
+        maxSpeedKmh = ?
       WHERE id = 1
     `, draft.checkpointAt, draft.lastFixAt, draft.speedKmh, draft.distanceM,
-    draft.elevationGainM, draft.lastAltitudeM, draft.durationMs, draft.segment, draft.activeSince, draft.stationarySince);
+    draft.elevationGainM, draft.lastAltitudeM, draft.durationMs, draft.segment, draft.activeSince, draft.stationarySince,
+    draft.maxSpeedKmh);
   });
 }
