@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton, AppCard, EmptyState, ErrorState, LoadingState } from '@/components';
 import { type Activity, type RideDetails, loadActivities, rideEffortLabels, saveActivity } from '@/database/activities';
+import { useSession } from '@/features/auth/SessionProvider';
 import { ProfileMenu } from '@/features/account/ProfileMenu';
 import { ActivityMapPreview } from '@/features/activities/components/ActivityMapPreview';
 import { ProgressPanel } from '@/features/activities/components/ProgressPanel';
@@ -22,12 +23,17 @@ import { radius, spacing, typography, useTheme, themedStyles } from '@/theme';
 const activityViewability = { itemVisiblePercentThreshold: 10, minimumViewTime: 120 };
 
 export default function HomeScreen() {
+  const accountId = useSession()?.user.id;
+  return accountId ? <AccountHome key={accountId} accountId={accountId} /> : null;
+}
+
+function AccountHome({ accountId }: { accountId: string }) {
   const { colors } = useTheme();
   const styles = useStyles();
   const { section, perfil } = useLocalSearchParams<{ section?: string; perfil?: string }>();
   const showFeed = section === 'feed';
   const profileTab = section === 'actividades' ? 'actividades' : section === 'tu' ? perfil ?? 'progreso' : 'mapas';
-  const tracking = useActivityTracking();
+  const tracking = useActivityTracking(accountId);
   const feed = useFeed(`post:${tracking.guidePostId ?? ''}`, !!tracking.guidePostId);
   const [activities, setActivities] = useState<Activity[] | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -45,7 +51,7 @@ export default function HomeScreen() {
   useEffect(() => {
     if (loadAttempt === 0) return;
     let active = true;
-    loadActivities().then(items => {
+    loadActivities(accountId).then(items => {
       if (active) {
         setActivities(items.sort((a, b) => b.startedAt - a.startedAt));
         setLoadError(false);
@@ -56,12 +62,12 @@ export default function HomeScreen() {
     return () => {
       active = false;
     };
-  }, [loadAttempt]);
+  }, [accountId, loadAttempt]);
 
   async function save(details: RideDetails) {
     const activity = tracking.activity;
     if (tracking.busy || tracking.running || !activity) throw new Error('Rodada no disponible');
-    const updated = await saveActivity({ ...activity, ...details }, await tracking.getRoute());
+    const updated = await saveActivity(accountId, { ...activity, ...details }, await tracking.getRoute());
     await tracking.reset();
     setActivities(updated);
     setEditingRide(false);
@@ -91,6 +97,7 @@ export default function HomeScreen() {
       <>
         <LiveRideMap
           key={activity.startedAt}
+          accountId={accountId}
           startedAt={activity.startedAt}
           guideRoute={guide?.route}
           running={running}
@@ -207,7 +214,7 @@ export default function HomeScreen() {
       ) : activities === null ? (
         <LoadingState message="Cargando actividades…" />
       ) : profileTab !== 'actividades' ? (
-        <ProgressPanel activities={activities} />
+        <ProgressPanel accountId={accountId} activities={activities} />
       ) : (
         <FlatList
           style={styles.page}
@@ -242,7 +249,7 @@ export default function HomeScreen() {
                     <ChevronRight size={20} color={colors.textSecondary} />
                   </Pressable>
                 </Link>
-                <ActivityMapPreview startedAt={item.startedAt} visible={visibleActivities.has(String(item.startedAt))} />
+                <ActivityMapPreview accountId={accountId} startedAt={item.startedAt} visible={visibleActivities.has(String(item.startedAt))} />
               </AppCard>
             );
           }}

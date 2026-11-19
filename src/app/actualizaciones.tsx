@@ -6,6 +6,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton, AppCard } from '@/components';
+import { useSession } from '@/features/auth/SessionProvider';
 import { loadRideDraft } from '@/database/rideDraft';
 import { spacing, typography, themedStyles } from '@/theme';
 
@@ -20,6 +21,7 @@ const actionErrors: Record<UpdateAction, string> = {
 export default function UpdatesScreen() {
   const styles = useStyles();
   const updates = Updates.useUpdates();
+  const accountId = useSession()?.user.id;
   const { currentlyRunning, isChecking, isDownloading, isRestarting, isUpdateAvailable, isUpdatePending } = updates;
   const [action, setAction] = useState<UpdateAction | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,13 +31,13 @@ export default function UpdatesScreen() {
   const nextAction = isUpdatePending ? 'apply' : isUpdateAvailable ? 'download' : 'check';
 
   async function runUpdateAction() {
-    if (!canUpdate || busy || runningAction.current) return;
+    if (!accountId || !canUpdate || busy || runningAction.current) return;
     runningAction.current = true;
     setAction(nextAction);
     setError(null);
     try {
       if (nextAction === 'apply') {
-        if ((await loadRideDraft())?.segmentStart != null) {
+        if ((await loadRideDraft(accountId))?.segmentStart != null) {
           setError('Pausa o guarda tu rodada antes de reiniciar TRAZA.');
           return;
         }

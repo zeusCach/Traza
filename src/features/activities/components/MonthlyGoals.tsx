@@ -7,11 +7,13 @@ import { radius, spacing, typography, themedStyles } from '@/theme';
 
 import { formatDistance } from '../format';
 
-const storageKey = 'traza.monthlyGoals.v1';
+function storageKey(accountId: string) {
+  return `traza.monthlyGoals.v2.${accountId}`;
+}
 const emptyGoals = { kilometers: 0, rides: 0 };
 
-export async function loadMonthlyGoals() {
-  const stored = await AsyncStorage.getItem(storageKey);
+export async function loadMonthlyGoals(accountId: string) {
+  const stored = await AsyncStorage.getItem(storageKey(accountId));
   if (stored === null) return emptyGoals;
   const goals = JSON.parse(stored);
   if (!goals || !Number.isSafeInteger(goals.kilometers) || goals.kilometers < 0 ||
@@ -21,7 +23,8 @@ export async function loadMonthlyGoals() {
   return { kilometers: Number(goals.kilometers), rides: Number(goals.rides) };
 }
 
-export function MonthlyGoals({ initialGoals, distance, count }: {
+export function MonthlyGoals({ accountId, initialGoals, distance, count }: {
+  accountId: string;
   initialGoals: typeof emptyGoals;
   distance: number;
   count: number;
@@ -44,7 +47,7 @@ export function MonthlyGoals({ initialGoals, distance, count }: {
     pending.current = true;
     setSaving(true);
     try {
-      await AsyncStorage.setItem(storageKey, JSON.stringify(next));
+      await AsyncStorage.setItem(storageKey(accountId), JSON.stringify(next));
       setGoals(next);
       setMessage('Metas guardadas.');
     } catch {

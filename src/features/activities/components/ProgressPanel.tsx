@@ -14,20 +14,20 @@ import { radius, spacing, typography, useTheme, themedStyles } from '@/theme';
 
 const monthFormat = new Intl.DateTimeFormat('es-MX', { month: 'long', year: 'numeric' });
 
-export function ProgressPanel({ activities }: { activities: Activity[] }) {
+export function ProgressPanel({ accountId, activities }: { accountId: string; activities: Activity[] }) {
   const [goals, setGoals] = useState<Awaited<ReturnType<typeof loadMonthlyGoals>> | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
-    loadMonthlyGoals().then(goals => {
+    loadMonthlyGoals(accountId).then(goals => {
       if (active) setGoals(goals);
     }).catch(() => {
       if (active) setFailed(true);
     });
     return () => { active = false; };
-  }, [attempt]);
+  }, [accountId, attempt]);
 
   if (failed) {
     return <ErrorState title="No pudimos abrir tu progreso" message="Intenta cargar de nuevo las metas guardadas." onRetry={() => {
@@ -35,10 +35,11 @@ export function ProgressPanel({ activities }: { activities: Activity[] }) {
       setAttempt(value => value + 1);
     }} />;
   }
-  return goals ? <ProgressDashboard activities={activities} goals={goals} /> : <LoadingState message="Cargando progreso…" />;
+  return goals ? <ProgressDashboard accountId={accountId} activities={activities} goals={goals} /> : <LoadingState message="Cargando progreso…" />;
 }
 
-function ProgressDashboard({ activities, goals }: {
+function ProgressDashboard({ accountId, activities, goals }: {
+  accountId: string;
   activities: Activity[];
   goals: Awaited<ReturnType<typeof loadMonthlyGoals>>;
 }) {
@@ -79,7 +80,7 @@ function ProgressDashboard({ activities, goals }: {
               <Text style={styles.caption}>{streak === 1 ? 'semana' : 'semanas'}</Text>
             </View>
           </AppCard>
-          <RideRecords activities={activities} />
+          <RideRecords accountId={accountId} activities={activities} />
           <AppCard style={styles.summary}>
             <Text accessibilityRole="header" style={styles.sectionTitle}>Mes deportivo</Text>
             <View style={styles.monthPicker}>
@@ -110,7 +111,7 @@ function ProgressDashboard({ activities, goals }: {
               ))}
             </View>
           </AppCard>
-          <MonthlyGoals initialGoals={goals} distance={totals.distance} count={totals.count} />
+          <MonthlyGoals accountId={accountId} initialGoals={goals} distance={totals.distance} count={totals.count} />
           <Text accessibilityRole="header" style={styles.sectionTitle}>Actividades del mes</Text>
         </View>
       )}

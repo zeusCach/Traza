@@ -10,6 +10,7 @@ import { radius, spacing, typography, themedStyles } from '@/theme';
 import { RideBasemap } from './RideBasemap';
 
 interface LiveRideMapProps {
+  accountId: string;
   startedAt: number;
   guideRoute?: ActivityRoute;
   running: boolean;
@@ -20,7 +21,7 @@ interface LiveRideMapProps {
   children: (route: ActivityRoute) => ReactNode;
 }
 
-export function LiveRideMap({ startedAt, guideRoute, running, segment, lastFixAt, locationMessage, header, children }: LiveRideMapProps) {
+export function LiveRideMap({ accountId, startedAt, guideRoute, running, segment, lastFixAt, locationMessage, header, children }: LiveRideMapProps) {
   const styles = useStyles();
   const [route, setRoute] = useState<ActivityRoute>([]);
   const [loadError, setLoadError] = useState(false);
@@ -36,7 +37,7 @@ export function LiveRideMap({ startedAt, guideRoute, running, segment, lastFixAt
       try {
         const previous = cursor.current;
         const through = running ? { segment, timestamp: lastFixAt ?? 0 } : undefined;
-        const points = await loadDraftRoutePoints(startedAt, previous, through);
+        const points = await loadDraftRoutePoints(accountId, startedAt, previous, through);
         if (!active) return;
         setLoadError(false);
         if (!points.length) return;
@@ -65,7 +66,7 @@ export function LiveRideMap({ startedAt, guideRoute, running, segment, lastFixAt
     return () => {
       active = false;
     };
-  }, [attempt, lastFixAt, running, segment, startedAt]);
+  }, [accountId, attempt, lastFixAt, running, segment, startedAt]);
 
   const status = loadError ? 'No pudimos cargar el recorrido' : locationMessage ??
     (!route.length ? (running ? 'Buscando señal GPS…' : 'Sin puntos GPS registrados') : null);

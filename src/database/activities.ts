@@ -33,14 +33,16 @@ export interface RoutePoint {
 
 export type ActivityRoute = RoutePoint[][];
 
-const key = 'traza.activities.v1';
-
-function routeKey(startedAt: number) {
-  return `traza.activityRoute.v1.${startedAt}`;
+function historyKey(accountId: string) {
+  return `traza.activities.v2.${accountId}`;
 }
 
-export async function loadActivities(): Promise<Activity[]> {
-  const stored = await AsyncStorage.getItem(key);
+function routeKey(accountId: string, startedAt: number) {
+  return `traza.activityRoute.v2.${accountId}.${startedAt}`;
+}
+
+export async function loadActivities(accountId: string): Promise<Activity[]> {
+  const stored = await AsyncStorage.getItem(historyKey(accountId));
   if (stored === null) return [];
 
   const activities: unknown = JSON.parse(stored);
@@ -67,8 +69,8 @@ function isActivity(value: unknown): value is Activity {
   );
 }
 
-export async function loadActivityRoute(startedAt: number): Promise<ActivityRoute> {
-  const stored = await AsyncStorage.getItem(routeKey(startedAt));
+export async function loadActivityRoute(accountId: string, startedAt: number): Promise<ActivityRoute> {
+  const stored = await AsyncStorage.getItem(routeKey(accountId, startedAt));
   if (stored === null) return [];
   const route: unknown = JSON.parse(stored);
   if (!Array.isArray(route) || !route.every(segment => Array.isArray(segment) && segment.every(isRoutePoint))) {
@@ -94,26 +96,26 @@ function writeHistory<T>(operation: () => Promise<T>) {
   return result;
 }
 
-export function saveActivity(activity: Activity, route: ActivityRoute) {
+export function saveActivity(accountId: string, activity: Activity, route: ActivityRoute) {
   return writeHistory(async () => {
-    const history = await loadActivities();
+    const history = await loadActivities(accountId);
     const updated = [activity, ...history.filter(item => item.startedAt !== activity.startedAt)];
     if (route.length > 0) {
-      await AsyncStorage.setItem(routeKey(activity.startedAt), JSON.stringify(route));
+      await AsyncStorage.setItem(routeKey(accountId, activity.startedAt), JSON.stringify(route));
     }
-    await AsyncStorage.setItem(key, JSON.stringify(updated));
+    await AsyncStorage.setItem(historyKey(accountId), JSON.stringify(updated));
     return updated;
   });
 }
 
-export function updateRideDetails(startedAt: number, details: RideDetails) {
+export function updateRideDetails(accountId: string, startedAt: number, details: RideDetails) {
   return writeHistory(async () => {
-    const history = await loadActivities();
+    const history = await loadActivities(accountId);
     const index = history.findIndex(item => item.startedAt === startedAt);
     if (index < 0) throw new Error('Rodada no encontrada');
     const activity = { ...history[index], ...details };
     history[index] = activity;
-    await AsyncStorage.setItem(key, JSON.stringify(history));
+    await AsyncStorage.setItem(historyKey(accountId), JSON.stringify(history));
     return activity;
   });
 }

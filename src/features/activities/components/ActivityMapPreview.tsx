@@ -5,7 +5,8 @@ import { loadActivityRoute, type ActivityRoute } from '@/database/activities';
 import { RideBasemap } from '@/features/tracking/components/RideBasemap';
 import { radius, spacing, typography, themedStyles } from '@/theme';
 
-export const ActivityMapPreview = memo(function ActivityMapPreview({ startedAt, visible }: {
+export const ActivityMapPreview = memo(function ActivityMapPreview({ accountId, startedAt, visible }: {
+  accountId: string;
   startedAt: number;
   visible: boolean;
 }) {
@@ -15,13 +16,13 @@ export const ActivityMapPreview = memo(function ActivityMapPreview({ startedAt, 
 
   useEffect(() => {
     let active = true;
-    loadActivityRoute(startedAt).then(result => {
+    loadActivityRoute(accountId, startedAt).then(result => {
       if (active) setRoute(result);
     }).catch(() => {
       if (active) setFailed(true);
     });
     return () => { active = false; };
-  }, [startedAt]);
+  }, [accountId, startedAt]);
 
   if (failed) return <Text style={styles.notice}>No se pudo abrir el recorrido.</Text>;
 

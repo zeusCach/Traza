@@ -12,7 +12,7 @@ import { bestRouteTimes, recordDistances } from '../progress';
 
 type RecordTime = { duration: number; startedAt: number };
 
-export function RideRecords({ activities }: { activities: Activity[] }) {
+export function RideRecords({ accountId, activities }: { accountId: string; activities: Activity[] }) {
   const { colors } = useTheme();
   const styles = useStyles();
   const [records, setRecords] = useState<(RecordTime | null)[] | null>(null);
@@ -26,7 +26,7 @@ export function RideRecords({ activities }: { activities: Activity[] }) {
       let hadError = false;
       for (const activity of activities) {
         try {
-          const route = await loadActivityRoute(activity.startedAt);
+          const route = await loadActivityRoute(accountId, activity.startedAt);
           if (!active) return;
           bestRouteTimes(route).forEach((duration, index) => {
             if (Number.isFinite(duration) && duration < (result[index]?.duration ?? Infinity)) {
@@ -45,7 +45,7 @@ export function RideRecords({ activities }: { activities: Activity[] }) {
     }
     void load();
     return () => { active = false; };
-  }, [activities, attempt]);
+  }, [accountId, activities, attempt]);
 
   return (
     <AppCard style={styles.card}>

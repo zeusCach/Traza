@@ -22,7 +22,7 @@ export interface RideDraft extends Activity {
   guidePostId: string | null;
 }
 
-let database: Promise<SQLiteDatabase> | undefined;
+const databases = new Map<string, Promise<SQLiteDatabase>>();
 let pendingWrite = Promise.resolve();
 const stationaryDelayMs = 8_000;
 const maxFixGapMs = 5_000;
@@ -44,8 +44,10 @@ async function retryLocked<T>(operation: () => Promise<T>): Promise<T> {
   return operation();
 }
 
-function openDraftDatabase() {
-  database ??= openDatabaseAsync('traza-ride-draft.db').then(async db => {
+function openDraftDatabase(accountId: string) {
+  const existing = databases.get(accountId);
+  if (existing) return existing;
+  const database = openDatabaseAsync(`traza-ride-draft.${accountId}.db`).then(async db => {
     await retryLocked(() => db.execAsync(`
       PRAGMA journal_mode = WAL;
       CREATE TABLE IF NOT EXISTS draft (
@@ -97,15 +99,16 @@ function openDraftDatabase() {
     }));
     return db;
   }).catch(error => {
-    database = undefined;
+    databases.delete(accountId);
     throw error;
   });
+  databases.set(accountId, database);
   return database;
 }
 
-function write<T>(operation: (db: SQLiteDatabase) => Promise<T>): Promise<T> {
+function write<T>(accountId: string, operation: (db: SQLiteDatabase) => Promise<T>): Promise<T> {
   const result = pendingWrite.then(async () => {
-    const db = await openDraftDatabase();
+    const db = await openDraftDatabase(accountId);
     const response: { value?: T } = {};
     await retryLocked(() => db.withExclusiveTransactionAsync(async transaction => {
       response.value = await operation(transaction);
@@ -120,12 +123,12 @@ function readDraft(db: SQLiteDatabase) {
   return db.getFirstAsync<RideDraft>('SELECT * FROM draft WHERE id = 1');
 }
 
-export async function loadRideDraft() {
-  return readDraft(await openDraftDatabase());
+export async function loadRideDraft(accountId: string) {
+  return readDraft(await openDraftDatabase(accountId));
 }
 
-export function beginRideSegment(mode: RecordingMode, now: number, guidePostId?: string) {
-  return write(async db => {
+export function beginRideSegment(accountId: string, mode: RecordingMode, now: number, guidePostId?: string) {
+  return write(accountId, async db => {
     const draft = await readDraft(db);
     if (guidePostId && draft) throw new Error('Ya hay una rodada pendiente');
     if (draft?.segmentStart != null) return draft;
@@ -142,8 +145,8 @@ export function beginRideSegment(mode: RecordingMode, now: number, guidePostId?:
   });
 }
 
-export function setSegmentToForeground(segmentStart: number) {
-  return write(async db => {
+export function setSegmentToForeground(accountId: string, segmentStart: number) {
+  return write(accountId, async db => {
     await db.runAsync(
       "UPDATE draft SET mode = 'foreground' WHERE id = 1 AND segmentStart = ?",
       segmentStart,
@@ -152,8 +155,8 @@ export function setSegmentToForeground(segmentStart: number) {
   });
 }
 
-export function pauseRideDraft(stoppedAt?: number) {
-  return write(async db => {
+export function pauseRideDraft(accountId: string, stoppedAt?: number) {
+  return write(accountId, async db => {
     await db.runAsync(`
       UPDATE draft SET durationMs = durationMs + COALESCE(MAX(0, COALESCE(?, checkpointAt) - activeSince), 0),
         segmentStart = NULL, activeSince = NULL, stationarySince = NULL, lastFixAt = NULL, speedKmh = NULL
@@ -167,8 +170,8 @@ export function rideElapsedMs(draft: RideDraft, now: number) {
   return draft.durationMs + (draft.activeSince === null ? 0 : Math.max(0, now - draft.activeSince));
 }
 
-export function checkpointRide(segmentStart: number, now: number) {
-  return write(async db => {
+export function checkpointRide(accountId: string, segmentStart: number, now: number) {
+  return write(accountId, async db => {
     await db.runAsync(
       'UPDATE draft SET checkpointAt = MAX(checkpointAt, ?) WHERE id = 1 AND segmentStart = ?',
       now, segmentStart,
@@ -176,18 +179,19 @@ export function checkpointRide(segmentStart: number, now: number) {
   });
 }
 
-export function clearRideDraft() {
-  return write(db => db.execAsync('DELETE FROM points; DELETE FROM draft;'));
+export function clearRideDraft(accountId: string) {
+  return write(accountId, db => db.execAsync('DELETE FROM points; DELETE FROM draft;'));
 }
 
 export type DraftRoutePoint = RoutePoint & { segment: number };
 
 export async function loadDraftRoutePoints(
+  accountId: string,
   startedAt: number,
   after?: Pick<DraftRoutePoint, 'segment' | 'timestamp'>,
   through?: Pick<DraftRoutePoint, 'segment' | 'timestamp'>,
 ) {
-  const db = await openDraftDatabase();
+  const db = await openDraftDatabase(accountId);
   return db.getAllAsync<DraftRoutePoint>(`
     SELECT segment, timestamp, latitude, longitude, altitudeM FROM points
     WHERE (segment, timestamp) > (?, ?)
@@ -198,8 +202,8 @@ export async function loadDraftRoutePoints(
   through?.segment ?? Number.MAX_SAFE_INTEGER, through?.timestamp ?? 0, startedAt);
 }
 
-export async function loadDraftRoute(): Promise<ActivityRoute> {
-  const db = await openDraftDatabase();
+export async function loadDraftRoute(accountId: string): Promise<ActivityRoute> {
+  const db = await openDraftDatabase(accountId);
   const rows = await db.getAllAsync<RoutePoint & { segment: number }>(
     'SELECT segment, timestamp, latitude, longitude, altitudeM FROM points ORDER BY segment, timestamp',
   );
@@ -215,8 +219,8 @@ export async function loadDraftRoute(): Promise<ActivityRoute> {
   return route;
 }
 
-export function appendRideLocations(locations: LocationObject[], source: 'background' | number) {
-  return write(async db => {
+export function appendRideLocations(accountId: string, locations: LocationObject[], source: 'background' | number) {
+  return write(accountId, async db => {
     const draft = await readDraft(db);
     if (!draft || draft.segmentStart === null ||
       (source === 'background' ? draft.mode !== source : draft.mode !== 'foreground' || draft.segmentStart !== source)) {

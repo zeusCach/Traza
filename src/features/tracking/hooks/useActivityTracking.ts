@@ -69,7 +69,7 @@ async function getRecordingPermission(): Promise<{ mode: RecordingMode; approxim
   return { mode: 'foreground', approximate };
 }
 
-export function useActivityTracking() {
+export function useActivityTracking(accountId: string) {
   const [draft, setDraft] = useState<RideDraft | null>(null);
   const [now, setNow] = useState(Date.now);
   const [ready, setReady] = useState(false);
@@ -86,32 +86,32 @@ export function useActivityTracking() {
     let active = true;
     async function restore() {
       try {
-        const stored = await loadRideDraft();
+        const stored = await loadRideDraft(accountId);
         if (!active) return;
         const finished = stored &&
-          (await loadActivities()).some(activity => activity.startedAt === stored.startedAt);
+          (await loadActivities(accountId)).some(activity => activity.startedAt === stored.startedAt);
         if (!active) return;
         let restored = stored;
         if (finished) {
-          await clearRideDraft();
+          await clearRideDraft(accountId);
           restored = null;
         }
         try {
           if (restored?.segmentStart != null) {
-            const registered = restored.mode === 'background' && await isBackgroundLocationRegistered();
+            const registered = restored.mode === 'background' && await isBackgroundLocationRegistered(accountId);
             // The task may have saved more fixes while the app was opening.
-            if (registered) restored = await loadRideDraft();
+            if (registered) restored = await loadRideDraft(accountId);
             const receivingFixes = registered && restored?.lastFixAt != null &&
               Date.now() - restored.lastFixAt <= recoveryWindowMs;
             if (!receivingFixes) {
-              restored = await pauseRideDraft();
+              restored = await pauseRideDraft(accountId);
               await stopBackgroundLocation();
             }
           } else {
             await stopBackgroundLocation();
           }
         } catch {
-          restored = await pauseRideDraft();
+          restored = await pauseRideDraft(accountId);
           if (active) setError('No pudimos detener el servicio de ubicación. Intenta reanudar o guardar la rodada.');
         }
         if (active) {
@@ -127,7 +127,7 @@ export function useActivityTracking() {
     return () => {
       active = false;
     };
-  }, [attempt]);
+  }, [accountId, attempt]);
 
   const runCommand = useCallback(async (operation: () => Promise<void>) => {
     if (changing.current) return false;
@@ -157,15 +157,15 @@ export function useActivityTracking() {
       if (!(await checkLocationServices())) return;
       await stopBackgroundLocation();
       const startTime = Date.now();
-      let started = await beginRideSegment(mode, startTime, guidePostId);
+      let started = await beginRideSegment(accountId, mode, startTime, guidePostId);
       setLocationFailed(false);
       setApproximate(permission.approximate);
       setRecovered(false);
       if (mode === 'background') {
         try {
-          await startBackgroundLocation();
+          await startBackgroundLocation(accountId);
         } catch {
-          started = await setSegmentToForeground(startTime) ?? started;
+          started = await setSegmentToForeground(accountId, startTime) ?? started;
           try {
             await stopBackgroundLocation();
           } catch {
@@ -175,16 +175,16 @@ export function useActivityTracking() {
       }
       setNow(Date.now());
       setDraft(started.mode !== 'background' && AppState.currentState === 'background'
-        ? await pauseRideDraft(Date.now())
+        ? await pauseRideDraft(accountId, Date.now())
         : started);
     });
   }
 
   const pause = useCallback(() => runCommand(async () => {
-    const paused = await pauseRideDraft(Date.now());
+    const paused = await pauseRideDraft(accountId, Date.now());
     setDraft(paused);
     await stopBackgroundLocation();
-  }), [runCommand]);
+  }), [accountId, runCommand]);
 
   const segmentStart = draft?.segmentStart ?? null;
   const mode = draft?.mode;
@@ -201,10 +201,10 @@ export function useActivityTracking() {
       try {
         const time = Date.now();
         if (AppState.currentState === 'active' && time - lastCheckpoint >= checkpointIntervalMs) {
-          await checkpointRide(startedAt, time);
+          await checkpointRide(accountId, startedAt, time);
           lastCheckpoint = time;
         }
-        const stored = await loadRideDraft();
+        const stored = await loadRideDraft(accountId);
         if (active && version === revision.current) setDraft(stored);
       } catch {
         if (active) setError('No pudimos guardar un punto de recuperación.');
@@ -228,7 +228,7 @@ export function useActivityTracking() {
       clearInterval(sync);
       listener.remove();
     };
-  }, [mode, pause, segmentStart]);
+  }, [accountId, mode, pause, segmentStart]);
 
   useEffect(() => {
     if (segmentStart === null || mode !== 'foreground') return;
@@ -240,7 +240,7 @@ export function useActivityTracking() {
     Location.watchPositionAsync(rideLocationOptions, position => {
       if (active) {
         setLocationFailed(false);
-        void appendRideLocations([position], segmentStart).catch(() => {
+        void appendRideLocations(accountId, [position], segmentStart).catch(() => {
           if (active) setError('No pudimos guardar un punto GPS.');
         });
       }
@@ -252,11 +252,11 @@ export function useActivityTracking() {
       active = false;
       subscription?.remove();
     };
-  }, [mode, segmentStart]);
+  }, [accountId, mode, segmentStart]);
 
   async function reset() {
     await stopBackgroundLocation();
-    await clearRideDraft();
+    await clearRideDraft(accountId);
     setDraft(null);
     setRecovered(false);
     setError(null);
@@ -312,7 +312,7 @@ export function useActivityTracking() {
       setError(null);
       setAttempt(current => current + 1);
     },
-    getRoute: loadDraftRoute,
+    getRoute: () => loadDraftRoute(accountId),
     start: begin,
     pause,
     resume: () => begin(),

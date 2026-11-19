@@ -11,6 +11,7 @@ import { RideEditor } from '@/features/activities/components/RideEditor';
 import { RideShareCard } from '@/features/activities/components/RideShareCard';
 import { activityDateFormat, averageSpeed, formatDistance, formatDuration, formatElevationGain, formatSpeed } from '@/features/activities/format';
 import { estimateMaxSpeed } from '@/features/activities/routeDistance';
+import { useSession } from '@/features/auth/SessionProvider';
 import { RideBasemap } from '@/features/tracking/components/RideBasemap';
 import { PublishRideButton } from '@/features/feed/PublishRideButton';
 import { spacing, typography, themedStyles } from '@/theme';
@@ -21,8 +22,11 @@ type SummaryState =
 
 export default function ActivityScreen() {
   const styles = useStyles();
+  const accountId = useSession()?.user.id;
   const { id } = useLocalSearchParams<{ id: string }>();
   const startedAt = typeof id === 'string' && /^\d+$/.test(id) ? Number(id) : NaN;
+
+  if (!accountId) return null;
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -37,7 +41,7 @@ export default function ActivityScreen() {
           />
         </View>
         {Number.isSafeInteger(startedAt) ? (
-          <ActivitySummary key={startedAt} startedAt={startedAt} />
+          <ActivitySummary key={`${accountId}:${startedAt}`} accountId={accountId} startedAt={startedAt} />
         ) : (
           <EmptyState icon={Route} title="Rodada no encontrada" />
         )}
@@ -46,7 +50,7 @@ export default function ActivityScreen() {
   );
 }
 
-function ActivitySummary({ startedAt }: { startedAt: number }) {
+function ActivitySummary({ accountId, startedAt }: { accountId: string; startedAt: number }) {
   const styles = useStyles();
   const [attempt, setAttempt] = useState(0);
   const [summary, setSummary] = useState<SummaryState>({ status: 'loading' });
@@ -56,13 +60,13 @@ function ActivitySummary({ startedAt }: { startedAt: number }) {
     let active = true;
     async function load() {
       try {
-        const activity = (await loadActivities()).find(item => item.startedAt === startedAt);
+        const activity = (await loadActivities(accountId)).find(item => item.startedAt === startedAt);
         if (!active) return;
         if (!activity) {
           setSummary({ status: 'missing' });
           return;
         }
-        const route = await loadActivityRoute(startedAt).catch(() => null);
+        const route = await loadActivityRoute(accountId, startedAt).catch(() => null);
         if (active) setSummary({ status: 'ready', activity, route });
       } catch {
         if (active) setSummary({ status: 'error' });
@@ -72,7 +76,7 @@ function ActivitySummary({ startedAt }: { startedAt: number }) {
     return () => {
       active = false;
     };
-  }, [startedAt, attempt]);
+  }, [accountId, startedAt, attempt]);
 
   function retry() {
     setSummary({ status: 'loading' });
@@ -94,7 +98,7 @@ function ActivitySummary({ startedAt }: { startedAt: number }) {
   const maxSpeedKmh = activity.maxSpeedKmh ?? estimateMaxSpeed(route);
 
   async function saveDetails(details: RideDetails) {
-    const updated = await updateRideDetails(startedAt, details);
+    const updated = await updateRideDetails(accountId, startedAt, details);
     setSummary({ status: 'ready', activity: updated, route });
     setEditing(false);
   }
