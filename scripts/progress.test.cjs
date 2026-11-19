@@ -41,6 +41,15 @@ function point(meters, seconds) {
   return { latitude: 0, longitude: meters / 6371000 * 180 / Math.PI, timestamp: seconds * 1000 };
 }
 
+test('uses recent GPS displacement for a stable map heading', () => {
+  const { recentCourse } = load('routeDistance');
+  assert.equal(recentCourse([point(0, 1), point(3, 2)]), undefined);
+  assert.equal(recentCourse([point(0, 1), point(6, 14)]), undefined);
+  assert.equal(recentCourse([point(0, 1), point(3, 2), point(6, 3)]), 90);
+  assert.equal(recentCourse([point(6, 1), point(0, 3)]), 270);
+  assert.equal(recentCourse([point(6, 1)]), undefined);
+});
+
 test('interpolates the fastest distance, including a start between GPS fixes', () => {
   const route = [[point(0, 0), point(4000, 480), point(7000, 600)]];
   const [five, ten] = bestRouteTimes(route);

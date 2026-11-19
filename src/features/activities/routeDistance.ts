@@ -9,6 +9,26 @@ export function distanceBetween(a: RoutePoint, b: RoutePoint) {
   return 12_742_000 * Math.asin(Math.sqrt(Math.min(1, haversine)));
 }
 
+export function recentCourse(segment: readonly RoutePoint[] | undefined): number | undefined {
+  const end = segment?.at(-1);
+  if (!segment || !end) return;
+
+  for (let index = segment.length - 2; index >= 0; index -= 1) {
+    const start = segment[index];
+    const elapsed = end.timestamp - start.timestamp;
+    if (elapsed > 12_000) return;
+    if (elapsed <= 0 || distanceBetween(start, end) < 5) continue;
+
+    const radians = Math.PI / 180;
+    const from = start.latitude * radians;
+    const to = end.latitude * radians;
+    const longitudeChange = (end.longitude - start.longitude) * radians;
+    const east = Math.sin(longitudeChange) * Math.cos(to);
+    const north = Math.cos(from) * Math.sin(to) - Math.sin(from) * Math.cos(to) * Math.cos(longitudeChange);
+    return (Math.atan2(east, north) / radians + 360) % 360;
+  }
+}
+
 export function estimateMaxSpeed(route: ActivityRoute | null) {
   let maximum: number | null = null;
   for (const segment of route ?? []) {

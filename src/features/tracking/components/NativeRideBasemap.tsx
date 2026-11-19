@@ -1,10 +1,11 @@
 import { Camera, type CameraRef, GeoJSONSource, type GeoJSONSourceProps, type InitialViewState, Layer, type LngLat, Map, RasterDEMSource, RasterSource } from '@maplibre/maplibre-react-native';
-import { LocateFixed, Maximize, RefreshCw } from 'lucide-react-native';
+import { Compass, LocateFixed, Maximize, RefreshCw } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { ActivityRoute, RoutePoint } from '@/database/activities';
 import { ActivityRouteMap } from '@/features/activities/components/ActivityRouteMap';
+import { recentCourse } from '@/features/activities/routeDistance';
 import { radius, spacing, typography, useTheme, themedStyles } from '@/theme';
 
 import type { RideBasemapProps } from './RideBasemap';
@@ -56,13 +57,16 @@ export default memo(function NativeRideBasemap({ route, guideRoute, position: li
   const centered = useRef(false);
   const [ready, setReady] = useState(false);
   const [following, setFollowing] = useState(true);
+  const [courseUp, setCourseUp] = useState(true);
   const [mapMode, setMapMode] = useState<(typeof mapModes)[number]>('2D');
   const [satellite, setSatellite] = useState(false);
   const is3D = mapMode === '3D';
   const pitch = is3D ? 50 : 0;
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const lastRecorded = route.at(-1)?.at(-1);
+  const lastSegment = route.at(-1);
+  const lastRecorded = lastSegment?.at(-1);
+  const course = useMemo(() => live ? recentCourse(lastSegment) : undefined, [lastSegment, live]);
   const latest = live && livePosition && livePosition.timestamp >= (lastRecorded?.timestamp ?? 0)
     ? livePosition
     : live ? lastRecorded : undefined;
@@ -99,19 +103,26 @@ export default memo(function NativeRideBasemap({ route, guideRoute, position: li
     camera.current.easeTo({
       center: coordinates(latest),
       zoom: centered.current ? undefined : rideZoom,
+      bearing: courseUp ? course : 0,
       duration: 300,
     });
     centered.current = true;
-  }, [following, latest, ready]);
+  }, [course, courseUp, following, latest, ready]);
 
   function recenter() {
     if (!latest) return;
     if (following) {
-      camera.current?.easeTo({ center: coordinates(latest), zoom: rideZoom, duration: 300 });
+      camera.current?.easeTo({ center: coordinates(latest), zoom: rideZoom, bearing: courseUp ? course : 0, duration: 300 });
     } else {
       centered.current = false;
       setFollowing(true);
     }
+  }
+
+  function toggleCourseUp() {
+    if (courseUp && !following && ready) camera.current?.setStop({ bearing: 0, duration: 300, easing: 'ease' });
+    if (!courseUp) setFollowing(true);
+    setCourseUp(!courseUp);
   }
 
   const fitRoute = useCallback(() => {
@@ -276,6 +287,17 @@ export default memo(function NativeRideBasemap({ route, guideRoute, position: li
         >
           <LocateFixed size={22} color={following && latest ? colors.primary : colors.textPrimary} />
         </Pressable> : null}
+        {live && (
+          <Pressable
+            accessibilityRole="switch"
+            accessibilityLabel="Orientar mapa según mi rumbo"
+            accessibilityState={{ checked: courseUp }}
+            onPress={toggleCourseUp}
+            style={[styles.button, courseUp && styles.selectedMode]}
+          >
+            <Compass size={22} color={courseUp ? colors.background : colors.textPrimary} />
+          </Pressable>
+        )}
         {(!live || guideRoute) && (
           <Pressable accessibilityRole="button" accessibilityLabel={live ? 'Ver ruta guardada completa' : 'Ver recorrido completo'} onPress={() => {
             if (live) setFollowing(false);
