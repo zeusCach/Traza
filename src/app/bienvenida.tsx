@@ -1,6 +1,6 @@
 import { Link } from 'expo-router';
 import { ArrowRight } from 'lucide-react-native';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RouteBackdrop } from '@/features/auth/RouteBackdrop';
@@ -24,13 +24,15 @@ export default function WelcomeScreen() {
             Iniciar sesión <ArrowRight size={18} color={colors.background} />
           </Link>
           <View style={styles.social}>
-            {['Google', 'Facebook'].map(provider => (
-              <View key={provider} accessible accessibilityLabel={provider + ', próximamente'}
-                accessibilityRole="button" accessibilityState={{ disabled: true }} style={styles.provider}>
-                <Text style={styles.providerName}>{provider}</Text>
-                <Text style={styles.caption}>Próximamente</Text>
-              </View>
-            ))}
+            {Platform.OS !== 'web' && (
+              <Link href="/acceso" style={[styles.provider, styles.providerName, styles.googleLink]}>
+                Acceso con Google
+              </Link>
+            )}
+            <View accessible accessibilityLabel="Facebook, próximamente" style={styles.provider}>
+              <Text style={styles.providerName}>Facebook</Text>
+              <Text style={styles.caption}>Próximamente</Text>
+            </View>
           </View>
           <View style={styles.footer}>
             <Text style={styles.caption}>¿No tienes cuenta?</Text>
@@ -80,6 +82,7 @@ const useStyles = themedStyles(colors => StyleSheet.create({
     padding: spacing.sm,
   },
   providerName: { ...typography.label, color: colors.textPrimary },
+  googleLink: { textAlign: 'center', minHeight: 48, textAlignVertical: 'center' },
   caption: { ...typography.bodySmall, color: colors.textSecondary },
   footer: { alignItems: 'center' },
   register: { ...typography.button, color: colors.primary, padding: spacing.sm, minHeight: 48 },

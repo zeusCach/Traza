@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components';
 import { supabase } from '@/database/supabase';
-import { signInWithGoogle } from '@/features/auth/googleSignIn';
+import { googleSignInMessage, signInWithGoogle } from '@/features/auth/googleSignIn';
 import { RouteBackdrop } from '@/features/auth/RouteBackdrop';
 import { radius, spacing, typography, themedStyles, useTheme } from '@/theme';
 
@@ -67,8 +67,8 @@ function AccessForm({ initialRegister }: { initialRegister: boolean }) {
     setMessage('');
     try {
       await signInWithGoogle();
-    } catch {
-      setMessage('No pudimos iniciar sesión con Google. Vuelve a intentarlo.');
+    } catch (error) {
+      setMessage(googleSignInMessage(error));
     } finally {
       setPending(null);
     }
