@@ -65,7 +65,8 @@
           "savePhotosPermission": "TRAZA guarda los PNG de tus rodadas en la galería.",
           "granularPermissions": []
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components';
 import { supabase } from '@/database/supabase';
+import { signInWithGoogle } from '@/features/auth/googleSignIn';
 import { RouteBackdrop } from '@/features/auth/RouteBackdrop';
 import { radius, spacing, typography, themedStyles, useTheme } from '@/theme';
 
@@ -24,13 +25,14 @@ function AccessForm({ initialRegister }: { initialRegister: boolean }) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [register, setRegister] = useState(initialRegister);
-  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<'email' | 'google' | null>(null);
+  const busy = pending !== null;
   const [message, setMessage] = useState('');
   const canSubmit = !!email.trim() && !!password && (!register || (!!firstName.trim() && !!lastName.trim()));
 
   async function submit() {
     if (!supabase || busy || !canSubmit) return;
-    setBusy(true);
+    setPending('email');
     setMessage('');
     try {
       const credentials = { email: email.trim(), password };
@@ -55,7 +57,20 @@ function AccessForm({ initialRegister }: { initialRegister: boolean }) {
       else if (code === 'weak_password') setMessage('Elige una contraseña más segura.');
       else setMessage('No pudimos completar la solicitud. Vuelve a intentarlo.');
     } finally {
-      setBusy(false);
+      setPending(null);
+    }
+  }
+
+  async function continueWithGoogle() {
+    if (!supabase || busy) return;
+    setPending('google');
+    setMessage('');
+    try {
+      await signInWithGoogle();
+    } catch {
+      setMessage('No pudimos iniciar sesión con Google. Vuelve a intentarlo.');
+    } finally {
+      setPending(null);
     }
   }
 
@@ -69,7 +84,7 @@ function AccessForm({ initialRegister }: { initialRegister: boolean }) {
       <RouteBackdrop />
       <KeyboardAvoidingView style={styles.keyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <AppButton label="Volver" variant="ghost" size="md" onPress={goBack} />
+          <AppButton label="Volver" variant="ghost" size="md" disabled={busy} onPress={goBack} />
           <Text accessibilityRole="header" style={styles.title}>
             {register ? 'Crea tu cuenta' : 'Inicia sesión'}
           </Text>
@@ -121,10 +136,19 @@ function AccessForm({ initialRegister }: { initialRegister: boolean }) {
           </View>
           <AppButton
             label={register ? 'Crear cuenta' : 'Iniciar sesión'}
-            loading={busy}
-            disabled={!supabase || !canSubmit}
+            loading={pending === 'email'}
+            disabled={!supabase || !canSubmit || busy}
             onPress={() => void submit()}
           />
+          {Platform.OS !== 'web' && (
+            <AppButton
+              label="Continuar con Google"
+              variant="secondary"
+              loading={pending === 'google'}
+              disabled={!supabase || busy}
+              onPress={() => void continueWithGoogle()}
+            />
+          )}
           <AppButton
             label={register ? 'Ya tengo cuenta' : 'Crear una cuenta'}
             variant="ghost"
