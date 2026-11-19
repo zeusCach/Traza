@@ -69,6 +69,7 @@ export default function HomeScreen() {
   }
 
   const { activity, autoPaused, busy, currentSpeedKmh, elapsedMs, locationMessage, recovered, running } = tracking;
+  const rideStatus = autoPaused ? 'Pausa automática' : running ? 'Rodada en curso' : recovered ? 'Rodada recuperada' : 'Rodada pausada';
   const canStart = tracking.ready && activities !== null && !busy;
   const guide = tracking.guidePostId
     ? (feed.state?.published.find(post => post.id === tracking.guidePostId) ??
@@ -108,7 +109,7 @@ export default function HomeScreen() {
                 <History size={22} color={colors.textPrimary} />
               </Pressable>
               <Text accessibilityRole="header" style={styles.rideTitle}>
-                {autoPaused ? 'Pausa automática' : running ? 'Rodada en curso' : recovered ? 'Rodada recuperada' : 'Rodada pausada'}
+                {rideStatus}
               </Text>
             </View>
             {guide && (
@@ -131,6 +132,8 @@ export default function HomeScreen() {
                 distanceM={activity.distanceM}
                 elevationGainM={activity.elevationGainM ?? null}
                 currentSpeedKmh={currentSpeedKmh}
+                status={rideStatus}
+                locationMessage={locationMessage}
                 running={running && !autoPaused}
               />
               {tracking.error && (

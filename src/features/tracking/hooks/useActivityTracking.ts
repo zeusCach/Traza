@@ -272,14 +272,17 @@ export function useActivityTracking() {
       locationMessage = 'La rodada se reanudará cuando vuelvas a moverte.';
     } else if (locationFailed) {
       locationMessage = 'Se perdió la ubicación. El cronómetro sigue activo.';
-    } else if (mode === 'foreground') {
-      locationMessage = 'Mantén la app abierta. El permiso para registrar con la pantalla bloqueada no está disponible.';
     } else if (approximate) {
       locationMessage = 'La ubicación es aproximada. Activa la ubicación precisa para registrar el recorrido.';
     } else if (draft.lastFixAt === null) {
       locationMessage = 'Buscando señal GPS…';
     } else if (now - draft.lastFixAt > gpsStaleMs) {
       locationMessage = 'Señal GPS débil. Esperando una ubicación más precisa.';
+    } else {
+      locationMessage = 'GPS activo';
+    }
+    if (mode === 'foreground') {
+      locationMessage = `${locationMessage}\nMantén la app abierta para registrar.`;
     }
   }
 

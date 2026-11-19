@@ -15,11 +15,13 @@ interface RideDataPanelProps {
   distanceM: number | null;
   elevationGainM: number | null;
   currentSpeedKmh: number | null;
+  status: string;
+  locationMessage: string | null;
   running: boolean;
 }
 
 export function RideDataPanel({
-  route, elapsedMs, distanceM, elevationGainM, currentSpeedKmh, running,
+  route, elapsedMs, distanceM, elevationGainM, currentSpeedKmh, status, locationMessage, running,
 }: RideDataPanelProps) {
   const { colors } = useTheme();
   const styles = useStyles();
@@ -27,13 +29,15 @@ export function RideDataPanel({
   const time = formatDuration(elapsedMs);
   const distance = formatDistance(distanceM);
   const elevation = formatElevationGain(elevationGainM);
+  const speed = formatSpeed(currentSpeedKmh);
+  const thirdMetric = running ? `velocidad actual ${speed} kilómetros por hora` : `desnivel positivo ${elevation} metros`;
   const close = () => setExpanded(false);
 
   return (
     <>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Ampliar datos de la rodada. Duración ${time}, distancia ${distance} kilómetros, desnivel positivo ${elevation} metros`}
+        accessibilityLabel={`Ampliar datos de la rodada. Duración ${time}, distancia ${distance} kilómetros, ${thirdMetric}`}
         accessibilityState={{ expanded }}
         onPress={() => setExpanded(true)}
         style={({ pressed }) => [styles.panel, pressed && styles.pressed]}
@@ -45,7 +49,7 @@ export function RideDataPanel({
         <View style={styles.row}>
           <SummaryMetric label="Duración" value={time} />
           <SummaryMetric label="Distancia (km)" value={distance} prominent />
-          <SummaryMetric label="Desnivel (m)" value={elevation} />
+          {running ? <SummaryMetric label="Velocidad (km/h)" value={speed} /> : <SummaryMetric label="Desnivel (m)" value={elevation} />}
         </View>
       </Pressable>
       {expanded && (
@@ -63,14 +67,15 @@ export function RideDataPanel({
               </Pressable>
             </View>
             <ScrollView contentContainerStyle={styles.details}>
-              <Text style={styles.status}>{running ? 'Rodada en curso' : 'Rodada pausada'}</Text>
+              <Text style={styles.status}>{status}</Text>
+              {locationMessage && <Text style={styles.status}>{locationMessage}</Text>}
               <MetricCard label="Distancia" value={distance} unit="km" icon={Route} highlighted />
               <View style={styles.row}>
                 <MetricCard label="Duración" value={time} icon={Timer} />
                 <MetricCard label="Desnivel positivo" value={elevation} unit="m" icon={Mountain} />
               </View>
               <View style={styles.row}>
-                <MetricCard label="Velocidad actual" value={formatSpeed(currentSpeedKmh)} unit="km/h" icon={Gauge} />
+                <MetricCard label="Velocidad actual" value={speed} unit="km/h" icon={Gauge} />
                 <MetricCard label="Velocidad media" value={formatSpeed(averageSpeed(distanceM, elapsedMs))} unit="km/h" />
               </View>
               <ElevationProfile route={route} />
