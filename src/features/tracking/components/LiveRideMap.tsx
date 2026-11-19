@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components';
-import { type ActivityRoute } from '@/database/activities';
+import { type ActivityRoute, type RoutePoint } from '@/database/activities';
 import { type DraftRoutePoint, loadDraftRoutePoints } from '@/database/rideDraft';
 import { radius, spacing, typography, themedStyles } from '@/theme';
 
@@ -16,12 +16,13 @@ interface LiveRideMapProps {
   running: boolean;
   segment: number;
   lastFixAt: number | null;
+  position: RoutePoint | null;
   locationMessage: string | null;
   header: ReactNode;
   children: (route: ActivityRoute) => ReactNode;
 }
 
-export function LiveRideMap({ accountId, startedAt, guideRoute, running, segment, lastFixAt, locationMessage, header, children }: LiveRideMapProps) {
+export function LiveRideMap({ accountId, startedAt, guideRoute, running, segment, lastFixAt, position, locationMessage, header, children }: LiveRideMapProps) {
   const styles = useStyles();
   const [route, setRoute] = useState<ActivityRoute>([]);
   const [loadError, setLoadError] = useState(false);
@@ -73,7 +74,7 @@ export function LiveRideMap({ accountId, startedAt, guideRoute, running, segment
 
   return (
     <View style={styles.screen}>
-      <RideBasemap route={route} guideRoute={guideRoute} viewport={viewport} />
+      <RideBasemap route={route} guideRoute={guideRoute} position={position} viewport={viewport} />
       <SafeAreaView pointerEvents="box-none" style={styles.overlay}>
         <View pointerEvents="box-none" style={styles.top}>
           {header}

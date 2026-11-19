@@ -1,12 +1,13 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import type { ActivityRoute } from '@/database/activities';
+import type { ActivityRoute, RoutePoint } from '@/database/activities';
 import { ActivityRouteMap } from '@/features/activities/components/ActivityRouteMap';
 import { spacing, typography, themedStyles } from '@/theme';
 
 export interface RideBasemapProps {
   route: ActivityRoute;
   guideRoute?: ActivityRoute;
+  position?: RoutePoint | null;
   viewport?: { top: number; bottom: number; left: number; right: number };
   variant?: 'live' | 'activity' | 'preview';
 }

@@ -45,7 +45,7 @@ function routeView(route: ActivityRoute): InitialViewState {
   return { bounds: [west, south, east, north], padding: { top: 24, right: 24, bottom: 24, left: 24 } };
 }
 
-export default memo(function NativeRideBasemap({ route, guideRoute, viewport, variant = 'live' }: RideBasemapProps) {
+export default memo(function NativeRideBasemap({ route, guideRoute, position: livePosition, viewport, variant = 'live' }: RideBasemapProps) {
   const { colors } = useTheme();
   const styles = useStyles();
   const live = variant === 'live';
@@ -62,7 +62,10 @@ export default memo(function NativeRideBasemap({ route, guideRoute, viewport, va
   const pitch = is3D ? 50 : 0;
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const latest = live ? route.at(-1)?.at(-1) : undefined;
+  const lastRecorded = route.at(-1)?.at(-1);
+  const latest = live && livePosition && livePosition.timestamp >= (lastRecorded?.timestamp ?? 0)
+    ? livePosition
+    : live ? lastRecorded : undefined;
   const guideData = useMemo<GeoJSONSourceProps['data']>(() => ({
     type: 'FeatureCollection',
     features: (guideRoute ?? []).filter(segment => segment.length > 1).map(segment => ({

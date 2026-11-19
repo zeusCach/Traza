@@ -2,7 +2,7 @@ import * as Location from 'expo-location';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, AppState, Platform } from 'react-native';
 
-import { loadActivities } from '@/database/activities';
+import { loadActivities, type RoutePoint } from '@/database/activities';
 import {
   appendRideLocations,
   beginRideSegment,
@@ -77,6 +77,7 @@ export function useActivityTracking(accountId: string) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locationFailed, setLocationFailed] = useState(false);
+  const [cachedPosition, setCachedPosition] = useState<RoutePoint | null>(null);
   const [approximate, setApproximate] = useState(false);
   const [recovered, setRecovered] = useState(false);
   const changing = useRef(false);
@@ -189,6 +190,18 @@ export function useActivityTracking(accountId: string) {
   const segmentStart = draft?.segmentStart ?? null;
   const mode = draft?.mode;
   useEffect(() => {
+    if (segmentStart === null || mode === 'timer') return;
+    let active = true;
+    void Location.getLastKnownPositionAsync({ maxAge: 60_000, requiredAccuracy: 100 }).then(position => {
+      if (active && position) {
+        const { latitude, longitude } = position.coords;
+        setCachedPosition({ latitude, longitude, timestamp: position.timestamp });
+      }
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [mode, segmentStart]);
+
+  useEffect(() => {
     if (segmentStart === null) return;
     const startedAt = segmentStart;
     let active = true;
@@ -258,6 +271,7 @@ export function useActivityTracking(accountId: string) {
     await stopBackgroundLocation();
     await clearRideDraft(accountId);
     setDraft(null);
+    setCachedPosition(null);
     setRecovered(false);
     setError(null);
   }
@@ -268,8 +282,6 @@ export function useActivityTracking(accountId: string) {
   if (running && draft) {
     if (mode === 'timer') {
       locationMessage = 'Ubicación no disponible. Solo se registrará el tiempo con la app abierta.';
-    } else if (autoPaused) {
-      locationMessage = 'La rodada se reanudará cuando vuelvas a moverte.';
     } else if (locationFailed) {
       locationMessage = 'Se perdió la ubicación. El cronómetro sigue activo.';
     } else if (approximate) {
@@ -278,6 +290,10 @@ export function useActivityTracking(accountId: string) {
       locationMessage = 'Buscando señal GPS…';
     } else if (now - draft.lastFixAt > gpsStaleMs) {
       locationMessage = 'Señal GPS débil. Esperando una ubicación más precisa.';
+    } else if (autoPaused) {
+      locationMessage = 'GPS activo · se reanudará al detectar movimiento';
+    } else if (!draft.gpsState?.moving) {
+      locationMessage = 'GPS activo · esperando movimiento';
     } else {
       locationMessage = 'GPS activo';
     }
@@ -300,6 +316,7 @@ export function useActivityTracking(accountId: string) {
     segment: draft?.segment ?? 0,
     guidePostId: draft?.guidePostId ?? null,
     lastFixAt: draft?.lastFixAt ?? null,
+    position: draft?.gpsState?.position ?? (running && mode !== 'timer' ? cachedPosition : null),
     elapsedMs: draft ? rideElapsedMs(draft, now) : 0,
     currentSpeedKmh: running && !autoPaused && !locationFailed && draft?.lastFixAt != null && now - draft.lastFixAt < speedMaxAgeMs
       ? draft.speedKmh

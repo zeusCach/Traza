@@ -103,6 +103,7 @@ function AccountHome({ accountId }: { accountId: string }) {
           running={running}
           segment={tracking.segment}
           lastFixAt={tracking.lastFixAt}
+          position={tracking.position}
           locationMessage={locationMessage}
           header={(
             <>

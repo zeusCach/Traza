@@ -7,6 +7,14 @@ import type { Activity, ActivityRoute, RoutePoint } from './activities';
 
 export type RecordingMode = 'background' | 'foreground' | 'timer';
 
+type MotionFix = RoutePoint & { accuracy: number; speedMps: number | null };
+
+interface GpsState {
+  position: RoutePoint | null;
+  pending: MotionFix[];
+  moving: boolean;
+}
+
 export interface RideDraft extends Activity {
   mode: RecordingMode;
   segment: number;
@@ -20,6 +28,7 @@ export interface RideDraft extends Activity {
   elevationGainM: number | null;
   lastAltitudeM: number | null;
   guidePostId: string | null;
+  gpsState: GpsState | null;
 }
 
 const databases = new Map<string, Promise<SQLiteDatabase>>();
@@ -28,9 +37,9 @@ const stationaryDelayMs = 8_000;
 const maxFixGapMs = 5_000;
 const maxRouteGapMs = 30_000;
 const maxHorizontalAccuracyM = 25;
-const motionSpeedKmh = 1.8;
-const startupDriftSpeedKmh = 5.4;
-const startupUnknownSpeedMps = 15;
+const maxMapAccuracyM = 100;
+const minMovingSpeedMps = 1.4;
+const motionWindowMs = 8_000;
 
 async function retryLocked<T>(operation: () => Promise<T>): Promise<T> {
   for (const delay of [50, 150, 400]) {
@@ -98,6 +107,9 @@ function openDraftDatabase(accountId: string) {
       if (schemaVersion < 5) {
         await db.execAsync('ALTER TABLE draft ADD COLUMN maxSpeedKmh REAL; PRAGMA user_version = 5;');
       }
+      if (schemaVersion < 6) {
+        await db.execAsync('ALTER TABLE draft ADD COLUMN gpsState TEXT; PRAGMA user_version = 6;');
+      }
     }));
     return db;
   }).catch(error => {
@@ -121,8 +133,9 @@ function write<T>(accountId: string, operation: (db: SQLiteDatabase) => Promise<
   return result;
 }
 
-function readDraft(db: SQLiteDatabase) {
-  return db.getFirstAsync<RideDraft>('SELECT * FROM draft WHERE id = 1');
+async function readDraft(db: SQLiteDatabase): Promise<RideDraft | null> {
+  const row = await db.getFirstAsync<Omit<RideDraft, 'gpsState'> & { gpsState: string | null }>('SELECT * FROM draft WHERE id = 1');
+  return row && { ...row, gpsState: row.gpsState ? JSON.parse(row.gpsState) : null };
 }
 
 export async function loadRideDraft(accountId: string) {
@@ -140,7 +153,7 @@ export function beginRideSegment(accountId: string, mode: RecordingMode, now: nu
       ON CONFLICT(id) DO UPDATE SET
         mode = excluded.mode, segment = draft.segment + 1,
         segmentStart = excluded.segmentStart, activeSince = excluded.activeSince, checkpointAt = excluded.checkpointAt,
-        stationarySince = NULL,
+        stationarySince = NULL, gpsState = NULL,
         lastFixAt = NULL, speedKmh = NULL, lastAltitudeM = NULL
     `, now, mode, now, now, now, guidePostId ?? null);
     return (await readDraft(db))!;
@@ -221,6 +234,25 @@ export async function loadDraftRoute(accountId: string): Promise<ActivityRoute> 
   return route;
 }
 
+function plausibleStep(from: RoutePoint, to: MotionFix) {
+  const elapsed = (to.timestamp - from.timestamp) / 1_000;
+  const accuracyAllowance = Math.max(4, to.accuracy * 0.75);
+  const speedAllowance = (to.speedMps ?? 18) * elapsed * 1.8;
+  return distanceBetween(from, to) <= accuracyAllowance + speedAllowance;
+}
+
+function confirmMotion(fixes: MotionFix[]) {
+  if (fixes.length < 3) return false;
+  const first = fixes[0];
+  const last = fixes[fixes.length - 1];
+  const elapsed = (last.timestamp - first.timestamp) / 1_000;
+  const displacement = distanceBetween(first, last);
+  const uncertainty = Math.max(...fixes.map(fix => fix.accuracy));
+  if (elapsed < 2 || displacement < Math.max(6, uncertainty * 1.25, elapsed * minMovingSpeedMps)) return false;
+  const pathLength = fixes.slice(1).reduce((sum, fix, index) => sum + distanceBetween(fixes[index], fix), 0);
+  return displacement >= pathLength * 0.8;
+}
+
 export function appendRideLocations(accountId: string, locations: LocationObject[], source: 'background' | number) {
   return write(accountId, async db => {
     const draft = await readDraft(db);
@@ -232,92 +264,99 @@ export function appendRideLocations(accountId: string, locations: LocationObject
       'SELECT timestamp, latitude, longitude FROM points WHERE segment = ? ORDER BY timestamp DESC LIMIT 1',
       draft.segment,
     );
+    const gps = draft.gpsState ?? { position: null, pending: [], moving: false };
     const ordered = [...locations].sort((a, b) => a.timestamp - b.timestamp);
     for (const { coords, timestamp } of ordered) {
       if (!Number.isFinite(timestamp) || timestamp < draft.segmentStart) continue;
       draft.checkpointAt = Math.max(draft.checkpointAt, timestamp);
       if (timestamp <= (draft.lastFixAt ?? -Infinity) ||
         coords.accuracy === null || !Number.isFinite(coords.accuracy) ||
-        coords.accuracy <= 0 || coords.accuracy > maxHorizontalAccuracyM ||
+        coords.accuracy <= 0 || coords.accuracy > maxMapAccuracyM ||
         !(Math.abs(coords.latitude) <= 90) || !(Math.abs(coords.longitude) <= 180)) {
         continue;
       }
-      const fixGap = timestamp - (draft.lastFixAt ?? timestamp);
-      draft.lastFixAt = timestamp;
-      const speed = coords.speed;
-      draft.speedKmh = speed !== null && Number.isFinite(speed) && speed >= 0 ? speed * 3.6 : null;
       const altitude = coords.altitude;
       const altitudeM = altitude !== null && Number.isFinite(altitude) ? altitude : null;
       const point = { latitude: coords.latitude, longitude: coords.longitude, timestamp, altitudeM };
-      let distance = previous ? distanceBetween(previous, point) : 0;
-      let minimumDisplacement = Math.max(8, coords.accuracy * 1.5);
-      // Until a first real leg is recorded, don't turn GPS acquisition drift into a route.
-      if (previous && !draft.distanceM) {
-        const seconds = Math.min(timestamp - previous.timestamp, maxFixGapMs) / 1_000;
-        const accuracyMargin = Math.max(8, coords.accuracy * 2);
-        minimumDisplacement = accuracyMargin;
-        const speedMps = draft.speedKmh === null ? startupUnknownSpeedMps : draft.speedKmh / 3.6;
-        if (fixGap > maxFixGapMs || distance > accuracyMargin + 2 * speedMps * seconds) {
-          draft.segment += 1;
-          draft.lastAltitudeM = null;
-          draft.speedKmh = null;
-          previous = null;
-          distance = 0;
-        } else if (draft.speedKmh !== null && draft.speedKmh < startupDriftSpeedKmh && distance <= accuracyMargin) {
-          draft.speedKmh = 0;
-        }
-      }
-      const moving = draft.speedKmh !== null
-        ? draft.speedKmh >= motionSpeedKmh
-        : distance >= minimumDisplacement;
+      if (!gps.position || timestamp > gps.position.timestamp) gps.position = point;
+      if (coords.accuracy > maxHorizontalAccuracyM) continue;
 
-      if (moving) {
-        draft.stationarySince = null;
-        const resuming = draft.activeSince === null;
-        if (resuming) draft.activeSince = timestamp;
-        if (resuming || (previous && timestamp - previous.timestamp > maxRouteGapMs)) {
-          draft.segment += 1;
+      const fixGap = timestamp - (draft.lastFixAt ?? timestamp);
+      draft.lastFixAt = timestamp;
+      if (fixGap > maxFixGapMs || (gps.moving && previous && timestamp - previous.timestamp > maxRouteGapMs)) {
+        gps.pending = [];
+        gps.moving = false;
+      }
+      const speed = coords.speed;
+      const speedMps = speed !== null && Number.isFinite(speed) && speed >= 0 ? speed : null;
+      const fix = { ...point, speedMps, accuracy: coords.accuracy };
+      const stationary = speedMps !== null && speedMps < minMovingSpeedMps;
+      let confirmed: MotionFix[] = [];
+      if (stationary) {
+        gps.moving = false;
+        gps.pending = [];
+      } else if (gps.moving && previous && plausibleStep(previous, fix)) {
+        confirmed = [fix];
+      } else {
+        gps.moving = false;
+        const lastCandidate = gps.pending.at(-1);
+        if (lastCandidate && !plausibleStep(lastCandidate, fix)) gps.pending = [];
+        gps.pending = gps.pending.filter(candidate => timestamp - candidate.timestamp <= motionWindowMs).slice(-15);
+        gps.pending.push(fix);
+        if (confirmMotion(gps.pending)) {
+          confirmed = gps.pending;
+          gps.pending = [];
+          gps.moving = true;
+          if (previous) draft.segment += 1;
           draft.lastAltitudeM = null;
           previous = null;
-          distance = 0;
         }
-      } else if (draft.activeSince !== null) {
-        if (draft.stationarySince === null || fixGap > maxFixGapMs) draft.stationarySince = timestamp;
-        if (timestamp - draft.stationarySince >= stationaryDelayMs) {
-          draft.durationMs += Math.max(0, draft.stationarySince - draft.activeSince);
-          draft.activeSince = null;
+      }
+      if (!confirmed.length) {
+        draft.speedKmh = 0;
+        draft.distanceM ??= 0;
+        if (!stationary) {
           draft.stationarySince = null;
+        } else if (draft.activeSince !== null) {
+          if (draft.stationarySince === null || fixGap > maxFixGapMs) draft.stationarySince = timestamp;
+          if (timestamp - draft.stationarySince >= stationaryDelayMs) {
+            draft.durationMs += Math.max(0, draft.stationarySince - draft.activeSince);
+            draft.activeSince = null;
+            draft.stationarySince = null;
+          }
         }
+        continue;
       }
-      if (!moving && previous) continue;
-      // Keep short turns and slow movement when the device reports motion.
-      if (previous && distance < 1) continue;
-      if (previous && draft.speedKmh !== null) {
-        draft.maxSpeedKmh = Math.max(draft.maxSpeedKmh ?? 0, draft.speedKmh);
-      }
-      await db.runAsync(
-        'INSERT INTO points (segment, timestamp, latitude, longitude, altitudeM) VALUES (?, ?, ?, ?, ?)',
-        draft.segment, timestamp, point.latitude, point.longitude, altitudeM,
-      );
-      previous = point;
-      draft.distanceM = (draft.distanceM ?? 0) + distance;
-      if (altitudeM !== null) {
-        if (draft.lastAltitudeM !== null) {
-          const climb = Math.max(0, altitudeM - draft.lastAltitudeM);
-          draft.elevationGainM = (draft.elevationGainM ?? 0) + climb;
+      draft.stationarySince = null;
+      draft.activeSince ??= confirmed[0].timestamp;
+      draft.speedKmh = 0;
+      for (const accepted of confirmed) {
+        const distance = previous ? distanceBetween(previous, accepted) : 0;
+        if (previous && distance < 1) continue;
+        if (previous) {
+          const elapsed = (accepted.timestamp - previous.timestamp) / 1_000;
+          draft.speedKmh = (accepted.speedMps ?? distance / elapsed) * 3.6;
+          draft.maxSpeedKmh = Math.max(draft.maxSpeedKmh ?? 0, draft.speedKmh);
         }
-        draft.lastAltitudeM = altitudeM;
-      } else {
-        draft.lastAltitudeM = null;
+        await db.runAsync(
+          'INSERT INTO points (segment, timestamp, latitude, longitude, altitudeM) VALUES (?, ?, ?, ?, ?)',
+          draft.segment, accepted.timestamp, accepted.latitude, accepted.longitude, accepted.altitudeM ?? null,
+        );
+        previous = accepted;
+        draft.distanceM = (draft.distanceM ?? 0) + distance;
+        if (accepted.altitudeM != null && draft.lastAltitudeM !== null) {
+          draft.elevationGainM = (draft.elevationGainM ?? 0) + Math.max(0, accepted.altitudeM - draft.lastAltitudeM);
+        }
+        draft.lastAltitudeM = accepted.altitudeM ?? null;
       }
     }
     await db.runAsync(`
       UPDATE draft SET checkpointAt = ?, lastFixAt = ?, speedKmh = ?, distanceM = ?,
         elevationGainM = ?, lastAltitudeM = ?, durationMs = ?, segment = ?, activeSince = ?, stationarySince = ?,
-        maxSpeedKmh = ?
+        maxSpeedKmh = ?, gpsState = ?
       WHERE id = 1
     `, draft.checkpointAt, draft.lastFixAt, draft.speedKmh, draft.distanceM,
     draft.elevationGainM, draft.lastAltitudeM, draft.durationMs, draft.segment, draft.activeSince, draft.stationarySince,
-    draft.maxSpeedKmh);
+    draft.maxSpeedKmh, JSON.stringify(gps));
   });
 }

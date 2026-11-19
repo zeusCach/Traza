@@ -9,7 +9,7 @@ import type { RideBasemapProps } from './RideBasemap';
 
 const NativeRideBasemap = lazy(() => import('./NativeRideBasemap'));
 
-export function RideBasemap({ route, guideRoute, viewport, variant = 'live' }: RideBasemapProps) {
+export function RideBasemap({ route, guideRoute, position, viewport, variant = 'live' }: RideBasemapProps) {
   const styles = useStyles();
   const fallback = variant === 'preview' ? null : <ActivityRouteMap route={route} guideRoute={guideRoute} live={variant === 'live'} fill={!!viewport} />;
   const expoGo = isRunningInExpoGo();
@@ -27,7 +27,7 @@ export function RideBasemap({ route, guideRoute, viewport, variant = 'live' }: R
   }
   return (
     <Suspense fallback={fallback}>
-      <NativeRideBasemap route={route} guideRoute={guideRoute} viewport={viewport} variant={variant} />
+      <NativeRideBasemap route={route} guideRoute={guideRoute} position={position} viewport={viewport} variant={variant} />
     </Suspense>
   );
 }
