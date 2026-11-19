@@ -1,12 +1,13 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { Eye, EyeOff } from 'lucide-react-native';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components';
 import { supabase } from '@/database/supabase';
 import { RouteBackdrop } from '@/features/auth/RouteBackdrop';
-import { radius, spacing, typography, themedStyles } from '@/theme';
+import { radius, spacing, typography, themedStyles, useTheme } from '@/theme';
 
 export default function AccessScreen() {
   const { modo } = useLocalSearchParams<{ modo?: string }>();
@@ -16,8 +17,10 @@ export default function AccessScreen() {
 
 function AccessForm({ initialRegister }: { initialRegister: boolean }) {
   const styles = useStyles();
+  const { colors } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [register, setRegister] = useState(initialRegister);
@@ -41,6 +44,7 @@ function AccessForm({ initialRegister }: { initialRegister: boolean }) {
       if (error) throw error;
       if (!data.session && register) {
         setPassword('');
+        setPasswordVisible(false);
         setRegister(false);
         setMessage('Revisa tu correo para confirmar tu cuenta y después inicia sesión.');
       }
@@ -92,16 +96,29 @@ function AccessForm({ initialRegister }: { initialRegister: boolean }) {
             style={styles.input}
           />
           <Text style={styles.label}>Contraseña</Text>
-          <TextInput
-            accessibilityLabel="Contraseña"
-            secureTextEntry
-            autoComplete={register ? 'new-password' : 'current-password'}
-            value={password}
-            onChangeText={setPassword}
-            editable={!busy}
-            onSubmitEditing={() => void submit()}
-            style={styles.input}
-          />
+          <View style={[styles.inputFrame, styles.passwordRow]}>
+            <TextInput
+              accessibilityLabel="Contraseña"
+              secureTextEntry={!passwordVisible}
+              autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
+              autoComplete={register ? 'new-password' : 'current-password'}
+              value={password}
+              onChangeText={setPassword}
+              editable={!busy}
+              onSubmitEditing={() => void submit()}
+              style={[styles.inputText, styles.passwordInput]}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={passwordVisible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              onPress={() => setPasswordVisible(visible => !visible)}
+              style={({ pressed }) => [styles.visibilityButton, pressed && styles.pressed]}
+            >
+              {passwordVisible ? <EyeOff size={22} color={colors.textSecondary} /> : <Eye size={22} color={colors.textSecondary} />}
+            </Pressable>
+          </View>
           <AppButton
             label={register ? 'Crear cuenta' : 'Iniciar sesión'}
             loading={busy}
@@ -115,6 +132,7 @@ function AccessForm({ initialRegister }: { initialRegister: boolean }) {
             onPress={() => {
               setRegister(!register);
               setPassword('');
+              setPasswordVisible(false);
               setMessage('');
             }}
           />
@@ -126,21 +144,33 @@ function AccessForm({ initialRegister }: { initialRegister: boolean }) {
   );
 }
 
-const useStyles = themedStyles(colors => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.surface },
-  keyboard: { flex: 1 },
-  content: { width: '100%', maxWidth: 480, alignSelf: 'center', padding: spacing.xl, gap: spacing.sm },
-  title: { ...typography.display, color: colors.textPrimary, marginBottom: spacing.md },
-  label: { ...typography.label, color: colors.textPrimary },
-  input: {
+const useStyles = themedStyles(colors => {
+  const inputText = {
     ...typography.body,
     color: colors.textPrimary,
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+  };
+  const inputFrame = {
     backgroundColor: colors.background,
     borderColor: colors.border,
     borderWidth: 1,
     borderRadius: radius.md,
-    minHeight: 48,
     marginBottom: spacing.xs,
-    paddingHorizontal: spacing.md,
-  },
-}));
+  };
+
+  return StyleSheet.create({
+    screen: { flex: 1, backgroundColor: colors.surface },
+    keyboard: { flex: 1 },
+    content: { width: '100%', maxWidth: 480, alignSelf: 'center', padding: spacing.xl, gap: spacing.sm },
+    title: { ...typography.display, color: colors.textPrimary, marginBottom: spacing.md },
+    label: { ...typography.label, color: colors.textPrimary },
+    input: { ...inputFrame, ...inputText },
+    inputFrame,
+    inputText,
+    passwordRow: { flexDirection: 'row', alignItems: 'center' },
+    passwordInput: { flex: 1, minWidth: 0 },
+    visibilityButton: { width: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
+    pressed: { opacity: 0.65 },
+  });
+});
