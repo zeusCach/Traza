@@ -216,6 +216,30 @@ test('shows a coarse position without recording it and rejects GPS oscillation w
   assert.equal((await store.loadDraftRoute('ana')).length, 0);
 });
 
+test('confirms a walk at 2.2 km/h and keeps live speed between submeter fixes', async t => {
+  const store = testDatabase(t)();
+  await store.beginRideSegment('ana', 'foreground', 1_000);
+  const walking = Array.from({ length: 12 }, (_, index) =>
+    location(1_000 + index * 1_000, 21 + index * 0.0000055, 5, 2.2 / 3.6));
+
+  await store.appendRideLocations('ana', walking.slice(0, 5), 1_000);
+  const acquiring = await store.loadRideDraft('ana');
+  assert.equal(acquiring.speedKmh, 0);
+  assert.equal(acquiring.gpsState.position.timestamp, 5_000);
+  assert.equal((await store.loadDraftRoute('ana')).length, 0);
+
+  for (const fix of walking.slice(5)) await store.appendRideLocations('ana', [fix], 1_000);
+  const moving = await store.loadRideDraft('ana');
+  assert.ok(Math.abs(moving.speedKmh - 2.2) < 0.01);
+  assert.ok(moving.distanceM > 5 && moving.distanceM < 7);
+  assert.equal((await store.loadDraftRoute('ana'))[0][0].timestamp, 1_000);
+
+  await store.appendRideLocations('ana', [location(13_000, 21.00006, 5, 0)], 1_000);
+  const stopped = await store.loadRideDraft('ana');
+  assert.equal(stopped.speedKmh, 0);
+  assert.equal(stopped.distanceM, moving.distanceM);
+});
+
 test('automatically pauses from the first stationary fix and resumes in a new route segment', async t => {
   const store = testDatabase(t)();
   await store.beginRideSegment('ana', 'background', 1_000);

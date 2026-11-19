@@ -38,8 +38,10 @@ const maxFixGapMs = 5_000;
 const maxRouteGapMs = 30_000;
 const maxHorizontalAccuracyM = 25;
 const maxMapAccuracyM = 100;
-const minMovingSpeedMps = 1.4;
-const motionWindowMs = 8_000;
+const minMovingSpeedMps = 0.45;
+const slowMotionSpeedMps = 1.4;
+const minCandidateIntervalMs = 500;
+const motionWindowMs = 20_000;
 
 async function retryLocked<T>(operation: () => Promise<T>): Promise<T> {
   for (const delay of [50, 150, 400]) {
@@ -247,8 +249,16 @@ function confirmMotion(fixes: MotionFix[]) {
   const last = fixes[fixes.length - 1];
   const elapsed = (last.timestamp - first.timestamp) / 1_000;
   const displacement = distanceBetween(first, last);
+  const observedSpeed = displacement / elapsed;
+  const slow = observedSpeed < slowMotionSpeedMps || fixes.some(fix => fix.speedMps !== null && fix.speedMps < slowMotionSpeedMps);
   const uncertainty = Math.max(...fixes.map(fix => fix.accuracy));
-  if (elapsed < 2 || displacement < Math.max(6, uncertainty * 1.25, elapsed * minMovingSpeedMps)) return false;
+  const minimumDisplacement = slow ? Math.max(4, uncertainty) : Math.max(6, uncertainty * 1.25);
+  if (elapsed < (slow ? 4 : 2) || displacement < minimumDisplacement || observedSpeed < minMovingSpeedMps) return false;
+  if (slow) {
+    const reported = fixes.flatMap(fix => fix.speedMps === null ? [] : [fix.speedMps]);
+    const averageReported = reported.reduce((sum, speed) => sum + speed, 0) / reported.length;
+    if (reported.length && observedSpeed > averageReported * 1.75 + 0.2) return false;
+  }
   const pathLength = fixes.slice(1).reduce((sum, fix, index) => sum + distanceBetween(fixes[index], fix), 0);
   return displacement >= pathLength * 0.8;
 }
@@ -301,10 +311,12 @@ export function appendRideLocations(accountId: string, locations: LocationObject
         gps.moving = false;
         const lastCandidate = gps.pending.at(-1);
         if (lastCandidate && !plausibleStep(lastCandidate, fix)) gps.pending = [];
-        gps.pending = gps.pending.filter(candidate => timestamp - candidate.timestamp <= motionWindowMs).slice(-15);
-        gps.pending.push(fix);
-        if (confirmMotion(gps.pending)) {
-          confirmed = gps.pending;
+        gps.pending = gps.pending.filter(candidate => timestamp - candidate.timestamp <= motionWindowMs);
+        const previousCandidate = gps.pending.at(-1);
+        if (!previousCandidate || timestamp - previousCandidate.timestamp >= minCandidateIntervalMs) gps.pending.push(fix);
+        const start = gps.pending.findIndex((_, index) => confirmMotion(gps.pending.slice(index)));
+        if (start !== -1) {
+          confirmed = gps.pending.slice(start);
           gps.pending = [];
           gps.moving = true;
           if (previous) draft.segment += 1;
@@ -329,14 +341,15 @@ export function appendRideLocations(accountId: string, locations: LocationObject
       }
       draft.stationarySince = null;
       draft.activeSince ??= confirmed[0].timestamp;
-      draft.speedKmh = 0;
+      draft.speedKmh = speedMps !== null ? speedMps * 3.6 : draft.speedKmh ?? 0;
       for (const accepted of confirmed) {
         const distance = previous ? distanceBetween(previous, accepted) : 0;
         if (previous && distance < 1) continue;
         if (previous) {
           const elapsed = (accepted.timestamp - previous.timestamp) / 1_000;
-          draft.speedKmh = (accepted.speedMps ?? distance / elapsed) * 3.6;
-          draft.maxSpeedKmh = Math.max(draft.maxSpeedKmh ?? 0, draft.speedKmh);
+          const acceptedSpeed = (accepted.speedMps ?? distance / elapsed) * 3.6;
+          draft.speedKmh = acceptedSpeed;
+          draft.maxSpeedKmh = Math.max(draft.maxSpeedKmh ?? 0, acceptedSpeed);
         }
         await db.runAsync(
           'INSERT INTO points (segment, timestamp, latitude, longitude, altitudeM) VALUES (?, ?, ?, ?, ?)',
