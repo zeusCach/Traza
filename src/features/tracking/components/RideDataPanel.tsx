@@ -7,7 +7,7 @@ import { MetricCard } from '@/components';
 import type { ActivityRoute } from '@/database/activities';
 import { ElevationProfile } from '@/features/activities/components/ElevationProfile';
 import { averageSpeed, formatDistance, formatDuration, formatElevationGain, formatSpeed } from '@/features/activities/format';
-import { colors, radius, spacing, typography } from '@/theme';
+import { radius, spacing, typography, useTheme, themedStyles } from '@/theme';
 
 interface RideDataPanelProps {
   route: ActivityRoute;
@@ -21,6 +21,8 @@ interface RideDataPanelProps {
 export function RideDataPanel({
   route, elapsedMs, distanceM, elevationGainM, currentSpeedKmh, running,
 }: RideDataPanelProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [expanded, setExpanded] = useState(false);
   const time = formatDuration(elapsedMs);
   const distance = formatDistance(distanceM);
@@ -81,6 +83,7 @@ export function RideDataPanel({
 }
 
 function SummaryMetric({ label, value, prominent = false }: { label: string; value: string; prominent?: boolean }) {
+  const styles = useStyles();
   return (
     <View style={styles.metric}>
       <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.value, prominent && styles.prominent]}>{value}</Text>
@@ -89,7 +92,7 @@ function SummaryMetric({ label, value, prominent = false }: { label: string; val
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   panel: {
     padding: spacing.md,
     gap: spacing.sm,
@@ -126,4 +129,4 @@ const styles = StyleSheet.create({
   details: { gap: spacing.md, padding: spacing.lg, width: '100%', maxWidth: 600, alignSelf: 'center' },
   status: { ...typography.bodySmall, color: colors.textSecondary },
   pressed: { opacity: 0.75 },
-});
+}));

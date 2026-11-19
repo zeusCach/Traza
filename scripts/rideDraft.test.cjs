@@ -42,6 +42,7 @@ function testDatabase(t) {
     const exports = {};
     runInNewContext(outputText, {
       exports,
+      setTimeout,
       require(module) {
         if (module === '@/features/activities/routeDistance') return routeDistance;
         assert.equal(module, 'expo-sqlite');
@@ -203,4 +204,19 @@ test('manual pause during an automatic pause prevents motion from resuming the r
   assert.equal(paused.durationMs, 1_000);
   await store.appendRideLocations([location(16_000, 21.001)], 1_000);
   assert.equal((await store.loadRideDraft()).segmentStart, null);
+});
+
+test('background fixes continue after reopening and a long GPS gap does not add a straight line', async t => {
+  const openStore = testDatabase(t);
+  const store = openStore();
+  await store.beginRideSegment('background', 1_000);
+  await store.appendRideLocations([location(1_000, 21), location(2_000, 21.00005)], 'background');
+  const reopened = openStore();
+  await reopened.appendRideLocations([location(3_000, 21.0001), location(4_000, 21.00015, -1)], 'background');
+  const distanceBeforeGap = (await reopened.loadRideDraft()).distanceM;
+  await reopened.appendRideLocations([location(45_000, 21.01), location(46_000, 21.01005)], 'background');
+  const route = await reopened.loadDraftRoute();
+  assert.equal(JSON.stringify(route.map(segment => segment.map(point => point.timestamp))),
+    '[[1000,2000,3000],[45000,46000]]');
+  assert.ok(Math.abs((await reopened.loadRideDraft()).distanceM - distanceBeforeGap * 1.5) < 0.1);
 });

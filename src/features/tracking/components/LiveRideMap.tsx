@@ -5,7 +5,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { AppButton } from '@/components';
 import { type ActivityRoute } from '@/database/activities';
 import { type DraftRoutePoint, loadDraftRoutePoints } from '@/database/rideDraft';
-import { colors, radius, spacing, typography } from '@/theme';
+import { radius, spacing, typography, themedStyles } from '@/theme';
 
 import { RideBasemap } from './RideBasemap';
 
@@ -21,6 +21,7 @@ interface LiveRideMapProps {
 }
 
 export function LiveRideMap({ startedAt, guideRoute, running, segment, lastFixAt, locationMessage, header, children }: LiveRideMapProps) {
+  const styles = useStyles();
   const [route, setRoute] = useState<ActivityRoute>([]);
   const [loadError, setLoadError] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -94,7 +95,7 @@ export function LiveRideMap({ startedAt, guideRoute, running, segment, lastFixAt
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.surface },
   overlay: { ...StyleSheet.absoluteFill, justifyContent: 'space-between' },
   top: {
@@ -120,4 +121,4 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
   },
   retry: { alignSelf: 'flex-start' },
-});
+}));

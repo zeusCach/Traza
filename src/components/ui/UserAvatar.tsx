@@ -1,7 +1,8 @@
 import { User } from 'lucide-react-native';
+import { useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 
-import { colors, fontFamily, sizes } from '@/theme';
+import { fontFamily, sizes, useTheme, themedStyles } from '@/theme';
 
 export type UserAvatarSize = 'sm' | 'md' | 'lg';
 
@@ -26,14 +27,18 @@ function getInitials(name: string): string {
 }
 
 export function UserAvatar({ name, imageUri, size = 'md' }: UserAvatarProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const [failedUri, setFailedUri] = useState<string>();
   const diameter = dimension[size];
   const containerStyle = { width: diameter, height: diameter, borderRadius: diameter / 2 };
   const initials = name ? getInitials(name) : '';
 
-  if (imageUri) {
+  if (imageUri && imageUri !== failedUri) {
     return (
       <Image
         source={{ uri: imageUri }}
+        onError={() => setFailedUri(imageUri)}
         accessibilityLabel={name ? `Avatar de ${name}` : 'Avatar'}
         style={[styles.container, containerStyle]}
       />
@@ -55,7 +60,7 @@ export function UserAvatar({ name, imageUri, size = 'md' }: UserAvatarProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   container: {
     overflow: 'hidden',
   },
@@ -70,4 +75,4 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.bold,
     color: colors.primary,
   },
-});
+}));

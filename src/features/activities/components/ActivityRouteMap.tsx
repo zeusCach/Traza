@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Defs, Path, Pattern, Polyline, Rect } from 'react-native-svg';
 
 import type { ActivityRoute } from '@/database/activities';
-import { colors, spacing, typography } from '@/theme';
+import { spacing, typography, useTheme, themedStyles } from '@/theme';
 
 const width = 360;
 const height = 224;
@@ -41,6 +41,8 @@ export function projectRoute(route: ActivityRoute, viewportHeight = height) {
 export const ActivityRouteMap = memo(function ActivityRouteMap({
   route, guideRoute, live = false, fill = false,
 }: { route: ActivityRoute; guideRoute?: ActivityRoute; live?: boolean; fill?: boolean }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const viewportHeight = live ? liveHeight : height;
   const { segments, guide } = useMemo(() => {
     const guideCount = guideRoute?.filter(segment => segment.length > 0).length ?? 0;
@@ -101,9 +103,9 @@ export const ActivityRouteMap = memo(function ActivityRouteMap({
   );
 });
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   map: { width: '100%', aspectRatio: width / height, backgroundColor: colors.background },
   live: { aspectRatio: width / liveHeight, maxHeight: 420, backgroundColor: colors.surface },
   fill: { flex: 1, width: '100%', backgroundColor: colors.surface },
   north: { position: 'absolute', top: spacing.sm, right: spacing.sm, ...typography.caption, color: colors.textSecondary },
-});
+}));

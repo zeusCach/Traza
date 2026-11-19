@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 
-import { colors, radius, spacing } from '@/theme';
+import { radius, spacing, useTheme, themedStyles } from '@/theme';
 
 export interface AppCardProps {
   children: ReactNode;
@@ -20,6 +20,8 @@ export function AppCard({
   style,
   accessibilityLabel,
 }: AppCardProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const cardStyle: ViewStyle = {
     backgroundColor: elevated ? colors.surfaceElevated : colors.surface,
     padding: spacing[padding],
@@ -41,7 +43,7 @@ export function AppCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   card: {
     borderRadius: radius.card,
     borderWidth: 1,
@@ -50,4 +52,4 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.9,
   },
-});
+}));

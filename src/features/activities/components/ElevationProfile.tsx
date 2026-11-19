@@ -4,7 +4,7 @@ import Svg, { Line, Polyline } from 'react-native-svg';
 
 import { AppCard } from '@/components';
 import type { ActivityRoute, RoutePoint } from '@/database/activities';
-import { colors, spacing, typography } from '@/theme';
+import { spacing, typography, useTheme, themedStyles } from '@/theme';
 
 import { formatDistance, formatElevationGain } from '../format';
 import { distanceBetween } from '../routeDistance';
@@ -14,6 +14,8 @@ const height = 112;
 const padding = 4;
 
 export const ElevationProfile = memo(function ElevationProfile({ route }: { route: ActivityRoute }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const profile = useMemo(() => {
     const lines: { distance: number; altitude: number }[][] = [];
     let distance = 0;
@@ -80,9 +82,9 @@ export const ElevationProfile = memo(function ElevationProfile({ route }: { rout
   );
 });
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   card: { gap: spacing.sm },
   title: { ...typography.subtitle, color: colors.textPrimary },
   caption: { ...typography.bodySmall, color: colors.textSecondary },
   axis: { flexDirection: 'row', justifyContent: 'space-between' },
-});
+}));

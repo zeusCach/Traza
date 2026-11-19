@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react-native';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { colors, sizes, spacing, typography } from '@/theme';
+import { sizes, spacing, typography, useTheme, themedStyles } from '@/theme';
 
 import { AppButton } from '../ui/AppButton';
 
@@ -14,6 +14,8 @@ export interface EmptyStateProps {
 }
 
 export function EmptyState({ icon: Icon, title, message, actionLabel, onAction }: EmptyStateProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.container}>
       <Icon size={sizes.iconLg * 2} color={colors.textSecondary} strokeWidth={1.5} />
@@ -28,7 +30,7 @@ export function EmptyState({ icon: Icon, title, message, actionLabel, onAction }
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -49,4 +51,4 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     width: '100%',
   },
-});
+}));

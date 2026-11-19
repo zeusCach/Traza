@@ -3,12 +3,13 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { loadActivityRoute, type ActivityRoute } from '@/database/activities';
 import { RideBasemap } from '@/features/tracking/components/RideBasemap';
-import { colors, radius, spacing, typography } from '@/theme';
+import { radius, spacing, typography, themedStyles } from '@/theme';
 
 export const ActivityMapPreview = memo(function ActivityMapPreview({ startedAt, visible }: {
   startedAt: number;
   visible: boolean;
 }) {
+  const styles = useStyles();
   const [route, setRoute] = useState<ActivityRoute | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -31,6 +32,7 @@ export const RouteMapPreview = memo(function RouteMapPreview({ route, visible }:
   route: ActivityRoute | null;
   visible: boolean;
 }) {
+  const styles = useStyles();
   if (route && !route.some(segment => segment.length > 0)) return null;
 
   return (
@@ -40,7 +42,7 @@ export const RouteMapPreview = memo(function RouteMapPreview({ route, visible }:
   );
 });
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   frame: { height: 164, borderRadius: radius.md, overflow: 'hidden', backgroundColor: colors.background },
   notice: { ...typography.caption, color: colors.textSecondary, padding: spacing.xs },
-});
+}));

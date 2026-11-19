@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react-native';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { colors, sizes, spacing, typography } from '@/theme';
+import { sizes, spacing, typography, useTheme, themedStyles } from '@/theme';
 
 import { AppCard } from './AppCard';
 
@@ -14,6 +14,8 @@ export interface MetricCardProps {
 }
 
 export function MetricCard({ label, value, unit, icon: Icon, highlighted = false }: MetricCardProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <AppCard padding="sm" style={styles.card} accessibilityLabel={`${label}: ${value} ${unit ?? ''}`}>
       <View style={styles.header}>
@@ -28,7 +30,7 @@ export function MetricCard({ label, value, unit, icon: Icon, highlighted = false
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   card: {
     flex: 1,
     gap: spacing.xs,
@@ -59,4 +61,4 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.textSecondary,
   },
-});
+}));

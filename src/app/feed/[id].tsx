@@ -1,5 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Bookmark, BookmarkCheck, Gauge, Mountain, Route, Timer } from 'lucide-react-native';
+import { ArrowLeft, Bookmark, BookmarkCheck, Gauge, Mountain, Route, Timer, Trash2 } from 'lucide-react-native';
+import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -7,14 +8,17 @@ import { AppButton, AppCard, EmptyState, ErrorState, LoadingState, MetricCard, U
 import { ElevationProfile } from '@/features/activities/components/ElevationProfile';
 import { activityDateFormat, averageSpeed, formatDistance, formatDuration, formatElevationGain, formatSpeed } from '@/features/activities/format';
 import { examplePosts, togglePost } from '@/features/feed/feedStorage';
+import { removeRemotePost } from '@/features/feed/remoteFeed';
 import { useFeed } from '@/features/feed/useFeed';
 import { RideBasemap } from '@/features/tracking/components/RideBasemap';
-import { colors, spacing, typography } from '@/theme';
+import { spacing, typography, themedStyles } from '@/theme';
 
 export default function FeedActivityScreen() {
+  const styles = useStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { state, error, busy, change, retry } = useFeed();
-  const post = state && [...state.published, ...examplePosts].find(item => item.id === id);
+  const { state, error, busy, change, retry, run, accountId } = useFeed(`post:${id}`);
+  const [confirm, setConfirm] = useState(false);
+  const post = state && (accountId ? state.published : [...state.published, ...examplePosts]).find(item => item.id === id);
   const saved = post && state?.saved.includes(post.id);
 
   return (
@@ -24,7 +28,7 @@ export default function FeedActivityScreen() {
           <AppButton icon={ArrowLeft} label="Volver" variant="ghost" size="md"
             onPress={() => router.canGoBack() ? router.back() : router.replace({ pathname: '/', params: { section: 'feed' } })} />
         </View>
-        {error ? <ErrorState title="No pudimos actualizar la publicación" message="Intenta cargar los datos locales de nuevo." onRetry={retry} /> : !state ? (
+        {error ? <ErrorState title="No pudimos actualizar la publicación" message="Vuelve a intentar cargarla." onRetry={retry} /> : !state ? (
           <LoadingState message="Cargando publicación…" />
         ) : !post ? (
           <EmptyState icon={Route} title="Publicación no encontrada" />
@@ -60,6 +64,17 @@ export default function FeedActivityScreen() {
                 {post.route.some(segment => segment.some(point => point.altitudeM != null)) && <ElevationProfile route={post.route} />}
               </>
             ) : <EmptyState icon={Route} title="Sin recorrido GPS" />}
+            {accountId && post.owned && (
+              <>
+                <AppButton icon={Trash2} label={confirm ? 'Confirmar retiro' : 'Quitar del Feed'}
+                  variant="secondary" loading={busy} onPress={() => {
+                    if (!confirm) return setConfirm(true);
+                    setConfirm(false);
+                    void run(() => removeRemotePost(accountId, post.id));
+                  }} />
+                {confirm && <AppButton label="Cancelar" variant="ghost" onPress={() => setConfirm(false)} />}
+              </>
+            )}
           </>
         )}
       </ScrollView>
@@ -67,7 +82,7 @@ export default function FeedActivityScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.lg, gap: spacing.md, width: '100%', maxWidth: 600, alignSelf: 'center' },
   back: { alignSelf: 'flex-start' },
@@ -77,4 +92,4 @@ const styles = StyleSheet.create({
   author: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   authorText: { flex: 1 },
   metrics: { flexDirection: 'row', gap: spacing.sm },
-});
+}));

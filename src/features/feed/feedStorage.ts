@@ -9,9 +9,10 @@ export interface FeedPost {
   activity: Activity;
   route: ActivityRoute;
   traces: number;
+  owned?: boolean;
 }
 
-interface FeedState {
+export interface FeedState {
   published: FeedPost[];
   traced: string[];
   saved: string[];

@@ -1,7 +1,7 @@
 import { TriangleAlert } from 'lucide-react-native';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { colors, sizes, spacing, typography } from '@/theme';
+import { sizes, spacing, typography, useTheme, themedStyles } from '@/theme';
 
 import { AppButton } from '../ui/AppButton';
 
@@ -18,6 +18,8 @@ export function ErrorState({
   onRetry,
   retryLabel = 'Reintentar',
 }: ErrorStateProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.container} accessibilityRole="alert">
       <TriangleAlert size={sizes.iconLg * 2} color={colors.error} strokeWidth={1.75} />
@@ -32,7 +34,7 @@ export function ErrorState({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'center',
@@ -55,4 +57,4 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     width: '100%',
   },
-});
+}));

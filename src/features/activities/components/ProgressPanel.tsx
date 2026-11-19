@@ -10,7 +10,7 @@ import { RideRecords } from '@/features/activities/components/RideRecords';
 import { WeeklyProgress } from '@/features/activities/components/WeeklyProgress';
 import { activityDateFormat, formatDistance, formatDuration, formatElevationGain } from '@/features/activities/format';
 import { groupWeeks, summarize } from '@/features/activities/progress';
-import { colors, radius, spacing, typography } from '@/theme';
+import { radius, spacing, typography, useTheme, themedStyles } from '@/theme';
 
 const monthFormat = new Intl.DateTimeFormat('es-MX', { month: 'long', year: 'numeric' });
 
@@ -42,6 +42,8 @@ function ProgressDashboard({ activities, goals }: {
   activities: Activity[];
   goals: Awaited<ReturnType<typeof loadMonthlyGoals>>;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [today] = useState(() => new Date());
   const [monthOffset, setMonthOffset] = useState(0);
   const { weeks, streak } = useMemo(() => groupWeeks(activities, today), [activities, today]);
@@ -134,7 +136,7 @@ function ProgressDashboard({ activities, goals }: {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   list: { flex: 1 },
   column: { width: '100%', maxWidth: 600, alignSelf: 'center', paddingHorizontal: spacing.lg },
   content: { paddingTop: spacing.xs, paddingBottom: spacing.xl },
@@ -162,4 +164,4 @@ const styles = StyleSheet.create({
   value: { ...typography.button, color: colors.textPrimary },
   activity: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   separator: { height: spacing.sm },
-});
+}));

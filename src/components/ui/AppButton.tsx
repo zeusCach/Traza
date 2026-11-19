@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react-native';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, radius, sizes, spacing, typography } from '@/theme';
+import { radius, sizes, spacing, typography, useTheme, themedStyles } from '@/theme';
 
 export type AppButtonVariant = 'primary' | 'secondary' | 'ghost';
 export type AppButtonSize = 'md' | 'lg';
@@ -17,12 +17,6 @@ export interface AppButtonProps {
   accessibilityLabel?: string;
 }
 
-const iconColor: Record<AppButtonVariant, string> = {
-  primary: colors.background,
-  secondary: colors.textPrimary,
-  ghost: colors.primary,
-};
-
 export function AppButton({
   label,
   onPress,
@@ -33,6 +27,9 @@ export function AppButton({
   loading = false,
   accessibilityLabel,
 }: AppButtonProps) {
+  const { colors } = useTheme();
+  const variantStyles = useVariantStyles();
+  const iconColor = variant === 'primary' ? colors.background : variant === 'ghost' ? colors.primary : colors.textPrimary;
   const isDisabled = disabled || loading;
   const height = size === 'lg' ? sizes.buttonLg : sizes.buttonMd;
 
@@ -52,11 +49,11 @@ export function AppButton({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={iconColor[variant]} />
+        <ActivityIndicator color={iconColor} />
       ) : (
         <View style={styles.content}>
-          {Icon ? <Icon size={sizes.iconMd} color={iconColor[variant]} strokeWidth={2} /> : null}
-          <Text style={[styles.label, { color: iconColor[variant] }]}>{label}</Text>
+          {Icon ? <Icon size={sizes.iconMd} color={iconColor} strokeWidth={2} /> : null}
+          <Text style={[styles.label, { color: iconColor }]}>{label}</Text>
         </View>
       )}
     </Pressable>
@@ -86,7 +83,7 @@ const styles = StyleSheet.create({
   },
 });
 
-const variantStyles = StyleSheet.create({
+const useVariantStyles = themedStyles(colors => StyleSheet.create({
   primary: { backgroundColor: colors.primary },
   secondary: {
     backgroundColor: colors.surfaceElevated,
@@ -94,4 +91,4 @@ const variantStyles = StyleSheet.create({
     borderColor: colors.border,
   },
   ghost: { backgroundColor: 'transparent' },
-});
+}));

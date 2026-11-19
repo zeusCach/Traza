@@ -3,13 +3,14 @@ import { lazy, Suspense } from 'react';
 import { StyleSheet, Text, TurboModuleRegistry, View } from 'react-native';
 
 import { ActivityRouteMap } from '@/features/activities/components/ActivityRouteMap';
-import { colors, spacing, typography } from '@/theme';
+import { spacing, typography, themedStyles } from '@/theme';
 
 import type { RideBasemapProps } from './RideBasemap';
 
 const NativeRideBasemap = lazy(() => import('./NativeRideBasemap'));
 
 export function RideBasemap({ route, guideRoute, viewport, variant = 'live' }: RideBasemapProps) {
+  const styles = useStyles();
   const fallback = variant === 'preview' ? null : <ActivityRouteMap route={route} guideRoute={guideRoute} live={variant === 'live'} fill={!!viewport} />;
   const expoGo = isRunningInExpoGo();
   if (expoGo || !TurboModuleRegistry.get('MLRNLocationModule')) {
@@ -31,7 +32,7 @@ export function RideBasemap({ route, guideRoute, viewport, variant = 'live' }: R
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   notice: { ...typography.bodySmall, color: colors.textPrimary, padding: spacing.sm },
   fullscreen: { flex: 1 },
   floatingNotice: {
@@ -41,4 +42,4 @@ const styles = StyleSheet.create({
     maxWidth: '85%',
     backgroundColor: colors.background,
   },
-});
+}));

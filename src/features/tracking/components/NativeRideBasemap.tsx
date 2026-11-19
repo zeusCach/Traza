@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { ActivityRoute, RoutePoint } from '@/database/activities';
 import { ActivityRouteMap } from '@/features/activities/components/ActivityRouteMap';
-import { colors, radius, spacing, typography } from '@/theme';
+import { radius, spacing, typography, useTheme, themedStyles } from '@/theme';
 
 import type { RideBasemapProps } from './RideBasemap';
 
@@ -41,6 +41,8 @@ function routeView(route: ActivityRoute): InitialViewState {
 }
 
 export default memo(function NativeRideBasemap({ route, guideRoute, viewport, variant = 'live' }: RideBasemapProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const live = variant === 'live';
   const preview = variant === 'preview';
   const guideView = useMemo(() => guideRoute ? routeView(guideRoute) : null, [guideRoute]);
@@ -255,7 +257,7 @@ export default memo(function NativeRideBasemap({ route, guideRoute, viewport, va
   );
 });
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   frame: { width: '100%', aspectRatio: 360 / 316, maxHeight: 420, backgroundColor: colors.surface },
   activityFrame: { aspectRatio: 360 / 252 },
   previewFrame: { flex: 1, backgroundColor: colors.surface },
@@ -284,4 +286,4 @@ const styles = StyleSheet.create({
   },
   retryLabel: { ...typography.caption, color: colors.textPrimary },
   fullscreenRetry: { top: '42%', left: 'auto', alignSelf: 'center' },
-});
+}));

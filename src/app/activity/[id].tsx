@@ -12,13 +12,14 @@ import { RideShareCard } from '@/features/activities/components/RideShareCard';
 import { activityDateFormat, averageSpeed, formatDistance, formatDuration, formatElevationGain, formatSpeed } from '@/features/activities/format';
 import { RideBasemap } from '@/features/tracking/components/RideBasemap';
 import { PublishRideButton } from '@/features/feed/PublishRideButton';
-import { colors, spacing, typography } from '@/theme';
+import { spacing, typography, themedStyles } from '@/theme';
 
 type SummaryState =
   | { status: 'loading' | 'missing' | 'error' }
   | { status: 'ready'; activity: Activity; route: ActivityRoute | null };
 
 export default function ActivityScreen() {
+  const styles = useStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
   const startedAt = typeof id === 'string' && /^\d+$/.test(id) ? Number(id) : NaN;
 
@@ -45,6 +46,7 @@ export default function ActivityScreen() {
 }
 
 function ActivitySummary({ startedAt }: { startedAt: number }) {
+  const styles = useStyles();
   const [attempt, setAttempt] = useState(0);
   const [summary, setSummary] = useState<SummaryState>({ status: 'loading' });
   const [editing, setEditing] = useState(false);
@@ -134,7 +136,7 @@ function ActivitySummary({ startedAt }: { startedAt: number }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.lg, gap: spacing.md, width: '100%', maxWidth: 600, alignSelf: 'center' },
   back: { alignSelf: 'flex-start' },
@@ -142,4 +144,4 @@ const styles = StyleSheet.create({
   heading: { ...typography.subtitle, color: colors.textPrimary },
   date: { ...typography.body, color: colors.textSecondary },
   metrics: { flexDirection: 'row', gap: spacing.sm },
-});
+}));

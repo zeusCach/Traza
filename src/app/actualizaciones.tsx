@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton, AppCard } from '@/components';
 import { loadRideDraft } from '@/database/rideDraft';
-import { colors, spacing, typography } from '@/theme';
+import { spacing, typography, themedStyles } from '@/theme';
 
 type UpdateAction = 'check' | 'download' | 'apply';
 
@@ -18,6 +18,7 @@ const actionErrors: Record<UpdateAction, string> = {
 };
 
 export default function UpdatesScreen() {
+  const styles = useStyles();
   const updates = Updates.useUpdates();
   const { currentlyRunning, isChecking, isDownloading, isRestarting, isUpdateAvailable, isUpdatePending } = updates;
   const [action, setAction] = useState<UpdateAction | null>(null);
@@ -103,7 +104,7 @@ export default function UpdatesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.md, gap: spacing.md },
   back: { alignSelf: 'flex-start' },
@@ -112,4 +113,4 @@ const styles = StyleSheet.create({
   card: { gap: spacing.xs },
   body: { ...typography.body, color: colors.textSecondary },
   error: { ...typography.bodySmall, color: colors.error },
-});
+}));

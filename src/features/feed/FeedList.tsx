@@ -1,12 +1,12 @@
-import { Link } from 'expo-router';
-import { Bookmark, ChevronRight, Heart, Play } from 'lucide-react-native';
+import { Link, router } from 'expo-router';
+import { Bookmark, ChevronRight, Heart, Newspaper, Play } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppButton, AppCard, EmptyState, ErrorState, LoadingState, UserAvatar } from '@/components';
 import { RouteMapPreview } from '@/features/activities/components/ActivityMapPreview';
 import { activityDateFormat, formatDistance, formatDuration } from '@/features/activities/format';
-import { colors, spacing, typography } from '@/theme';
+import { spacing, typography, useTheme, themedStyles } from '@/theme';
 
 import { examplePosts, togglePost, type FeedPost } from './feedStorage';
 import { useFeed } from './useFeed';
@@ -14,18 +14,20 @@ import { useFeed } from './useFeed';
 const feedViewability = { itemVisiblePercentThreshold: 10, minimumViewTime: 120 };
 
 export function FeedList() {
-  const { state, error, busy, change, retry } = useFeed();
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const { state, error, busy, change, retry, accountId } = useFeed();
   const [visiblePosts, setVisiblePosts] = useState<Set<string>>(() => new Set());
   const onPostsVisible = useCallback(({ viewableItems }: { viewableItems: { key: string }[] }) => {
     setVisiblePosts(new Set(viewableItems.map(item => item.key)));
   }, []);
 
-  if (error) return <ErrorState title="No pudimos actualizar el feed" message="Intenta cargar los datos locales de nuevo." onRetry={retry} />;
+  if (error) return <ErrorState title="No pudimos actualizar el feed" message="Vuelve a intentar cargar las publicaciones." onRetry={retry} />;
   if (!state) return <LoadingState message="Cargando feed…" />;
 
   return (
     <FlatList
-      data={[...state.published, ...examplePosts]}
+      data={accountId ? state.published : [...state.published, ...examplePosts]}
       keyExtractor={post => post.id}
       viewabilityConfig={feedViewability}
       onViewableItemsChanged={onPostsVisible}
@@ -36,9 +38,11 @@ export function FeedList() {
       ListHeaderComponent={(
         <View style={styles.header}>
           <Text accessibilityRole="header" style={styles.title}>Feed</Text>
-          <Text style={styles.caption}>Actividades de quienes sigues</Text>
+          {!accountId && <AppButton label="Inicia sesión para ver el feed compartido" size="md"
+            variant="secondary" onPress={() => router.push('/cuenta')} />}
         </View>
       )}
+      ListEmptyComponent={<EmptyState icon={Newspaper} title="Aún no hay publicaciones" />}
       renderItem={({ item: post }) => {
         const traced = state.traced.includes(post.id);
         const saved = state.saved.includes(post.id);
@@ -96,13 +100,17 @@ export function FeedList() {
 }
 
 export function SavedRoutes({ canStart, onStart }: { canStart: boolean; onStart: (post: FeedPost) => void }) {
-  const { state, error, retry } = useFeed();
-  const posts: FeedPost[] = state ? [...state.published, ...examplePosts].filter(post => state.saved.includes(post.id)) : [];
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const { state, error, retry, accountId } = useFeed('saved');
+  const posts: FeedPost[] = state
+    ? (accountId ? state.published : [...state.published, ...examplePosts]).filter(post => state.saved.includes(post.id))
+    : [];
 
   return (
     <View style={styles.card}>
       <Text accessibilityRole="header" style={styles.subtitle}>Rutas guardadas</Text>
-      {error ? <ErrorState title="No pudimos cargar las rutas" message="Intenta cargar las rutas guardadas en este dispositivo." onRetry={retry} /> : !state ? (
+      {error ? <ErrorState title="No pudimos cargar las rutas" message="Vuelve a intentar cargar tus rutas guardadas." onRetry={retry} /> : !state ? (
         <LoadingState message="Cargando rutas…" />
       ) : posts.length === 0 ? (
         <EmptyState icon={Bookmark} title="Aún no hay rutas guardadas" message="Guarda una ruta desde el Feed para encontrarla aquí." />
@@ -133,7 +141,7 @@ export function SavedRoutes({ canStart, onStart }: { canStart: boolean; onStart:
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = themedStyles(colors => StyleSheet.create({
   content: { width: '100%', maxWidth: 600, alignSelf: 'center', padding: spacing.lg, gap: spacing.md },
   header: { gap: spacing.xs },
   title: { ...typography.title, color: colors.textPrimary },
@@ -147,4 +155,4 @@ const styles = StyleSheet.create({
   action: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   active: { color: colors.primary },
   pressed: { opacity: 0.75 },
-});
+}));
