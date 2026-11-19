@@ -78,7 +78,7 @@ test('keeps drafts and background points separate by account', async t => {
 test('preserves paused time and separates resumed background segments', async t => {
   const store = testDatabase(t)();
   await store.beginRideSegment('ana', 'background', 1_000);
-  await store.appendRideLocations('ana', [location(2_000, 21.001), location(1_000, 21)], 'background');
+  await store.appendRideLocations('ana', [location(2_000, 21.00005), location(1_000, 21)], 'background');
   await store.appendRideLocations('ana', [location(2_000, 21.5), location(2_100, 21.5, 50)], 'background');
   await store.pauseRideDraft('ana', 3_000);
   await store.appendRideLocations('ana', [location(3_500, 21.5)], 'background');
@@ -87,7 +87,7 @@ test('preserves paused time and separates resumed background segments', async t 
   await store.beginRideSegment('ana', 'background', 10_000);
   await store.appendRideLocations('ana', [location(9_000, 21.5), location(10_000, 21.1)], 'background');
   assert.equal((await store.loadRideDraft('ana')).distanceM, firstDistance);
-  await store.appendRideLocations('ana', [location(11_000, 21.101)], 'background');
+  await store.appendRideLocations('ana', [location(11_000, 21.10005)], 'background');
   await store.pauseRideDraft('ana', 12_000);
 
   const draft = await store.loadRideDraft('ana');
@@ -102,7 +102,7 @@ test('recovers the last durable checkpoint after reopening an interrupted ride',
   const openStore = testDatabase(t);
   const store = openStore();
   await store.beginRideSegment('ana', 'background', 1_000);
-  await store.appendRideLocations('ana', [location(2_000, 21), location(3_000, 21.001)], 'background');
+  await store.appendRideLocations('ana', [location(2_000, 21), location(3_000, 21.00005)], 'background');
 
   const reopened = openStore();
   const recovered = await reopened.pauseRideDraft('ana', );
@@ -134,7 +134,7 @@ test('records in foreground after fallback and checkpoints a timer-only ride', a
 test('loads only new map points from the selected draft and preserves segment boundaries', async t => {
   const store = testDatabase(t)();
   await store.beginRideSegment('ana', 'background', 1_000);
-  await store.appendRideLocations('ana', [location(1_000, 21), location(2_000, 21.001)], 'background');
+  await store.appendRideLocations('ana', [location(1_000, 21), location(2_000, 21.00005)], 'background');
   const first = await store.loadDraftRoutePoints('ana', 1_000);
   assert.equal(first.length, 2);
   assert.equal((await store.loadDraftRoutePoints('ana', 1_000, first[1])).length, 0);
@@ -148,6 +148,28 @@ test('loads only new map points from the selected draft and preserves segment bo
   assert.equal(next.length, 1);
   assert.equal(next[0].segment, 2);
   assert.equal(next[0].timestamp, 4_000);
+});
+
+test('acquires GPS without drawing startup drift and starts drawing when the rider moves', async t => {
+  const store = testDatabase(t)();
+  await store.beginRideSegment('ana', 'background', 1_000);
+  await store.appendRideLocations('ana', [
+    location(1_000, 21, 40, 0),
+    location(2_000, 21, 10, 0),
+    location(3_000, 21.0001, 10, 0.7),
+    location(4_000, 21.0008, 8, 1),
+    location(5_000, 21.00081, 5, null),
+  ], 'background');
+
+  const stationary = await store.loadRideDraft('ana');
+  assert.equal(stationary.lastFixAt, 5_000);
+  assert.equal(stationary.distanceM, 0);
+  assert.ok((await store.loadDraftRoute('ana')).every(segment => segment.length === 1));
+
+  await store.appendRideLocations('ana', [location(6_000, 21.00085, 5, 3)], 'background');
+  const moving = await store.loadRideDraft('ana');
+  assert.ok(moving.distanceM > 5 && moving.distanceM < 6);
+  assert.equal((await store.loadDraftRoute('ana')).at(-1).length, 2);
 });
 
 test('records short movements and filters nearby fixes when stopped', async t => {
@@ -172,8 +194,8 @@ test('automatically pauses from the first stationary fix and resumes in a new ro
   await store.beginRideSegment('ana', 'background', 1_000);
   await store.appendRideLocations('ana', [
     location(1_000, 21),
-    location(2_000, 21.001),
-    ...Array.from({ length: 9 }, (_, index) => location(3_000 + index * 1_000, 21.0011, 5, 0)),
+    location(2_000, 21.00005),
+    ...Array.from({ length: 9 }, (_, index) => location(3_000 + index * 1_000, 21.00006, 5, 0)),
   ], 'background');
 
   const paused = await store.loadRideDraft('ana');
@@ -183,7 +205,7 @@ test('automatically pauses from the first stationary fix and resumes in a new ro
   assert.equal((await store.loadDraftRoute('ana'))[0].length, 2);
   await store.checkpointRide('ana', 1_000, 15_000);
 
-  await store.appendRideLocations('ana', [location(16_000, 21.0011), location(17_000, 21.0021)], 'background');
+  await store.appendRideLocations('ana', [location(16_000, 21.00006), location(17_000, 21.00011)], 'background');
   const resumed = await store.loadRideDraft('ana');
   assert.equal(resumed.activeSince, 16_000);
   assert.equal(store.rideElapsedMs(resumed, 18_000), 4_000);

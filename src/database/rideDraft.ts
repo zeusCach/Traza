@@ -29,6 +29,8 @@ const maxFixGapMs = 5_000;
 const maxRouteGapMs = 30_000;
 const maxHorizontalAccuracyM = 25;
 const motionSpeedKmh = 1.8;
+const startupDriftSpeedKmh = 5.4;
+const startupUnknownSpeedMps = 15;
 
 async function retryLocked<T>(operation: () => Promise<T>): Promise<T> {
   for (const delay of [50, 150, 400]) {
@@ -244,16 +246,30 @@ export function appendRideLocations(accountId: string, locations: LocationObject
       draft.lastFixAt = timestamp;
       const speed = coords.speed;
       draft.speedKmh = speed !== null && Number.isFinite(speed) && speed >= 0 ? speed * 3.6 : null;
-      if (draft.speedKmh !== null) {
-        draft.maxSpeedKmh = Math.max(draft.maxSpeedKmh ?? 0, draft.speedKmh);
-      }
       const altitude = coords.altitude;
       const altitudeM = altitude !== null && Number.isFinite(altitude) ? altitude : null;
       const point = { latitude: coords.latitude, longitude: coords.longitude, timestamp, altitudeM };
       let distance = previous ? distanceBetween(previous, point) : 0;
+      let minimumDisplacement = Math.max(8, coords.accuracy * 1.5);
+      // Until a first real leg is recorded, don't turn GPS acquisition drift into a route.
+      if (previous && !draft.distanceM) {
+        const seconds = Math.min(timestamp - previous.timestamp, maxFixGapMs) / 1_000;
+        const accuracyMargin = Math.max(8, coords.accuracy * 2);
+        minimumDisplacement = accuracyMargin;
+        const speedMps = draft.speedKmh === null ? startupUnknownSpeedMps : draft.speedKmh / 3.6;
+        if (fixGap > maxFixGapMs || distance > accuracyMargin + 2 * speedMps * seconds) {
+          draft.segment += 1;
+          draft.lastAltitudeM = null;
+          draft.speedKmh = null;
+          previous = null;
+          distance = 0;
+        } else if (draft.speedKmh !== null && draft.speedKmh < startupDriftSpeedKmh && distance <= accuracyMargin) {
+          draft.speedKmh = 0;
+        }
+      }
       const moving = draft.speedKmh !== null
         ? draft.speedKmh >= motionSpeedKmh
-        : distance >= Math.max(8, coords.accuracy * 1.5);
+        : distance >= minimumDisplacement;
 
       if (moving) {
         draft.stationarySince = null;
@@ -265,18 +281,20 @@ export function appendRideLocations(accountId: string, locations: LocationObject
           previous = null;
           distance = 0;
         }
-      } else {
-        if (draft.activeSince === null) continue;
+      } else if (draft.activeSince !== null) {
         if (draft.stationarySince === null || fixGap > maxFixGapMs) draft.stationarySince = timestamp;
         if (timestamp - draft.stationarySince >= stationaryDelayMs) {
           draft.durationMs += Math.max(0, draft.stationarySince - draft.activeSince);
           draft.activeSince = null;
           draft.stationarySince = null;
         }
-        if (previous) continue;
       }
+      if (!moving && previous) continue;
       // Keep short turns and slow movement when the device reports motion.
       if (previous && distance < 1) continue;
+      if (previous && draft.speedKmh !== null) {
+        draft.maxSpeedKmh = Math.max(draft.maxSpeedKmh ?? 0, draft.speedKmh);
+      }
       await db.runAsync(
         'INSERT INTO points (segment, timestamp, latitude, longitude, altitudeM) VALUES (?, ?, ?, ?, ?)',
         draft.segment, timestamp, point.latitude, point.longitude, altitudeM,
