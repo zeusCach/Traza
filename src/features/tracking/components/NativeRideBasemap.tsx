@@ -1,6 +1,4 @@
-import { Camera, type CameraRef, GeoJSONSource, type GeoJSONSourceProps, Images, type InitialViewState, Layer, type LngLat, Map, RasterDEMSource, RasterSource } from '@maplibre/maplibre-react-native';
-import { watchHeadingAsync, type LocationSubscription } from 'expo-location';
-import { useFocusEffect } from 'expo-router';
+import { Camera, type CameraRef, GeoJSONSource, type GeoJSONSourceProps, type InitialViewState, Layer, type LngLat, Map, RasterDEMSource, RasterSource } from '@maplibre/maplibre-react-native';
 import { LocateFixed, Maximize, RefreshCw } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -20,7 +18,6 @@ const satelliteTileJson = satelliteKey
 const initialView = { center: [-102, 23] as LngLat, zoom: 4 };
 const rideZoom = 16;
 const mapModes = ['2D', '3D'] as const;
-const headingImages = { 'ride-heading': require('../../../../assets/ride-heading.png') };
 
 function coordinates(point: RoutePoint): LngLat {
   return [point.longitude, point.latitude];
@@ -65,35 +62,10 @@ export default memo(function NativeRideBasemap({ route, guideRoute, position: li
   const pitch = is3D ? 50 : 0;
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const [heading, setHeading] = useState<number | null>(null);
   const lastRecorded = route.at(-1)?.at(-1);
   const latest = live && livePosition && livePosition.timestamp >= (lastRecorded?.timestamp ?? 0)
     ? livePosition
     : live ? lastRecorded : undefined;
-  const showHeading = !!latest && !failed;
-
-  useFocusEffect(useCallback(() => {
-    if (!showHeading) return;
-    let active = true;
-    let subscription: LocationSubscription | undefined;
-    setHeading(null);
-    void watchHeadingAsync(({ trueHeading, magHeading, accuracy }) => {
-      if (!active) return;
-      const degrees = trueHeading >= 0 ? trueHeading : magHeading;
-      if (accuracy <= 0 || !Number.isFinite(degrees) || degrees < 0) {
-        setHeading(null);
-        return;
-      }
-      setHeading(Math.round(degrees / 3) * 3 % 360);
-    }, () => { if (active) setHeading(null); }).then(result => {
-      if (active) subscription = result;
-      else result.remove();
-    }).catch(() => { if (active) setHeading(null); });
-    return () => {
-      active = false;
-      subscription?.remove();
-    };
-  }, [showHeading]));
   const guideData = useMemo<GeoJSONSourceProps['data']>(() => ({
     type: 'FeatureCollection',
     features: (guideRoute ?? []).filter(segment => segment.length > 1).map(segment => ({
@@ -250,18 +222,7 @@ export default memo(function NativeRideBasemap({ route, guideRoute, position: li
           />
           <Layer id="ride-track-points" type="circle" paint={{ 'circle-color': colors.primary, 'circle-radius': 3 }} />
         </GeoJSONSource>
-        {live && <Images images={headingImages} />}
         {live && <GeoJSONSource id="ride-position" data={position}>
-          {heading !== null && (
-            <Layer id="ride-position-heading" type="symbol" layout={{
-              'icon-image': 'ride-heading',
-              'icon-rotate': heading,
-              'icon-rotation-alignment': 'map',
-              'icon-pitch-alignment': 'viewport',
-              'icon-allow-overlap': true,
-              'icon-ignore-placement': true,
-            }} />
-          )}
           <Layer
             id="ride-position-marker"
             type="circle"
